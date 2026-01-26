@@ -4,8 +4,8 @@ import './globals.css';
 import { Providers } from './providers';
 
 export const metadata: Metadata = {
-  title: 'CRM11',
-  description: 'Plataforma genérica de CRM11 para experimentos e validações.'
+  title: 'CRM111',
+  description: 'Plataforma genérica de CRM111 para experimentos e validações.'
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
