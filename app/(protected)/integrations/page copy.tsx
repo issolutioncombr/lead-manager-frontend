@@ -124,7 +124,7 @@ const EVOLUTION_INSTANCE_PRESETS = [
   {
     id: 'slot1',
     name: 'MvpInstance1',
-    webhookUrl: 'https://renovo-ia-n8n.ogy936.easypanel.host/webhook/mvp-crm-evo-1'
+    webhookUrl: 'https://renovo-ia-n8n.ogy936.easypanel.host/webhook/mvp-crm-evo-2'
   },
   {
     id: 'slot2',
