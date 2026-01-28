@@ -158,9 +158,41 @@ export interface DashboardOriginItem {
   percent?: number;
 }
 
+export interface DashboardSourceStageItem {
+  stage: string;
+  count: number;
+  percent: number;
+}
+
+export interface DashboardSourceFunnel {
+  source: string;
+  totalLeads: number;
+  stages: DashboardSourceStageItem[];
+  conversion: {
+    agendouFromNovo: number;
+    entrouFromAgendou: number;
+    comprouFromEntrou: number;
+    comprouFromNovo: number;
+  };
+}
+
+export interface DashboardSeriesDay {
+  date: string;
+  totalLeads: number;
+  statuses: Array<{ status: string; count: number }>;
+}
+
+export interface DashboardSeriesResponse {
+  startDate: string;
+  endDate: string;
+  days: number;
+  series: DashboardSeriesDay[];
+}
+
 export interface DashboardResponse {
   date: string;
   totalLeads: number;
   top5Statuses: DashboardStatusItem[];
   origins: DashboardOriginItem[];
+  sourceFunnels: DashboardSourceFunnel[];
 }
