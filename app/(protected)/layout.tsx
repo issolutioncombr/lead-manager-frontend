@@ -3,7 +3,7 @@
 import { Navbar } from '../../components/Navbar';
 import { Loading } from '../../components/Loading';
 import { useProtectedRoute } from '../../hooks/useProtectedRoute';
-
+// jk
 export default function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const isReady = useProtectedRoute();
 
