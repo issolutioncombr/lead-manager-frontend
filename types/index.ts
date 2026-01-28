@@ -169,10 +169,10 @@ export interface DashboardSourceFunnel {
   totalLeads: number;
   stages: DashboardSourceStageItem[];
   conversion: {
-    agendouFromNovo: number;
+    agendouFromTotal: number;
     entrouFromAgendou: number;
     comprouFromEntrou: number;
-    comprouFromNovo: number;
+    comprouFromTotal: number;
   };
 }
 
@@ -189,10 +189,23 @@ export interface DashboardSeriesResponse {
   series: DashboardSeriesDay[];
 }
 
+export interface DashboardChannelTotal {
+  source: string;
+  count: number;
+  percent: number;
+}
+
+export interface DashboardHourlyLead {
+  hour: number;
+  count: number;
+}
+
 export interface DashboardResponse {
   date: string;
   totalLeads: number;
   top5Statuses: DashboardStatusItem[];
   origins: DashboardOriginItem[];
   sourceFunnels: DashboardSourceFunnel[];
+  channelTotals: DashboardChannelTotal[];
+  hourlyLeads: DashboardHourlyLead[];
 }

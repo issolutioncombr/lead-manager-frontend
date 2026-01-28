@@ -93,6 +93,13 @@ export default function DashboardPage() {
 
   const topOrigins = useMemo(() => (dashboard?.origins ?? []).slice(0, 10), [dashboard]);
 
+  const hourlyData = useMemo(() => {
+    return (dashboard?.hourlyLeads ?? []).map((item) => ({
+      label: `${String(item.hour).padStart(2, '0')}:00`,
+      total: item.count
+    }));
+  }, [dashboard]);
+
   const chartData = useMemo(() => {
     return (series?.series ?? []).map((day) => {
       const counts = day.statuses.reduce<Record<string, number>>((acc, item) => {
@@ -172,6 +179,18 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          {(dashboard?.channelTotals ?? []).map((item) => (
+            <MetricCard
+              key={item.source}
+              label={`Leads ${item.source}`}
+              value={item.count}
+              helper={`${item.percent}% do total`}
+              accent={item.count ? 'green' : 'gray'}
+            />
+          ))}
+        </div>
+
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
           {(dashboard?.sourceFunnels ?? []).map((funnel) => (
             <div key={funnel.source} className="rounded-2xl border border-gray-200 p-5">
@@ -181,8 +200,8 @@ export default function DashboardPage() {
                   <p className="mt-1 text-xs text-gray-500">Total de leads: {funnel.totalLeads}</p>
                 </div>
                 <div className="rounded-xl bg-gray-50 px-3 py-2 text-right">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Comprou / Novo</p>
-                  <p className="mt-1 text-lg font-semibold text-slate-900">{funnel.conversion.comprouFromNovo}%</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Comprou / Total</p>
+                  <p className="mt-1 text-lg font-semibold text-slate-900">{funnel.conversion.comprouFromTotal}%</p>
                 </div>
               </div>
 
@@ -211,8 +230,8 @@ export default function DashboardPage() {
 
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <div className="rounded-xl bg-gray-50 px-3 py-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Agendou / Novo</p>
-                  <p className="mt-1 text-base font-semibold text-slate-900">{funnel.conversion.agendouFromNovo}%</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Agendou / Total</p>
+                  <p className="mt-1 text-base font-semibold text-slate-900">{funnel.conversion.agendouFromTotal}%</p>
                 </div>
                 <div className="rounded-xl bg-gray-50 px-3 py-2">
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Entrou / Agendou</p>
@@ -258,6 +277,31 @@ export default function DashboardPage() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl bg-white p-6 shadow-sm">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Leads por hora</h2>
+            <p className="text-xs text-gray-500">Volume do dia selecionado em {dashboard?.date} (America/Sao_Paulo).</p>
+          </div>
+        </div>
+
+        {!hourlyData.length ? (
+          <p className="mt-4 text-sm text-gray-500">Sem dados para o dia.</p>
+        ) : (
+          <div className="mt-4 h-72 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={hourlyData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="label" stroke="#94a3b8" interval={2} />
+                <YAxis stroke="#94a3b8" allowDecimals={false} />
+                <Tooltip formatter={(value: unknown) => [value as number, 'Leads']} />
+                <Bar dataKey="total" fill="#d4b26e" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         )}
       </div>
