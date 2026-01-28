@@ -1,74 +1,70 @@
-﻿'use client';
+'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import api from '../../../lib/api';
 import { MetricCard } from '../../../components/MetricCard';
 import { Loading } from '../../../components/Loading';
-import { AppointmentsReport, FunnelReport } from '../../../types';
+import { DashboardResponse } from '../../../types';
 
-interface LeadsByOrigin {
-  label: string;
-  total: number;
-}
+const getTodayInSaoPaulo = () => {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
+};
+
+const stageLabels: Record<string, string> = {
+  NOVO: 'Novo',
+  AGENDOU_CALL: 'Agendou uma call',
+  ENTROU_CALL: 'Entrou na call',
+  COMPROU: 'Comprou',
+  NO_SHOW: 'Nao compareceu'
+};
 
 export default function DashboardPage() {
+  const [selectedDate, setSelectedDate] = useState(getTodayInSaoPaulo);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [funnelReport, setFunnelReport] = useState<FunnelReport | null>(null);
-  const [appointmentsReport, setAppointmentsReport] = useState<AppointmentsReport | null>(null);
-  const [leadsByOrigin, setLeadsByOrigin] = useState<LeadsByOrigin[]>([]);
+  const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
+
+  const fetchDashboard = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await api.get<DashboardResponse>('/reports/dashboard', {
+        params: {
+          date: selectedDate
+        }
+      });
+      setDashboard(res.data);
+    } catch (e) {
+      console.error(e);
+      setError('Nao foi possivel carregar os dados do dashboard.');
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedDate]);
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const [funnelRes, appointmentsRes, leadsRes] = await Promise.all([
-          api.get<FunnelReport>('/reports/funnel'),
-          api.get<AppointmentsReport>('/reports/appointments'),
-          api.get<{ data: { source?: string | null }[] }>('/leads', { params: { limit: 100 } })
-        ]);
+    void fetchDashboard();
+  }, [fetchDashboard]);
 
-        setFunnelReport(funnelRes.data);
-        setAppointmentsReport(appointmentsRes.data);
-
-        const originsMap = leadsRes.data.data.reduce<Record<string, number>>((acc, lead) => {
-          const origin = lead.source ?? 'Nao informado';
-          acc[origin] = (acc[origin] ?? 0) + 1;
-          return acc;
-        }, {});
-
-        setLeadsByOrigin(
-          Object.entries(originsMap)
-            .map(([label, total]) => ({ label, total }))
-            .sort((a, b) => b.total - a.total)
-        );
-      } catch (e) {
-        console.error(e);
-        setError('Nao foi possivel carregar os dados do dashboard.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, []);
-
-  const conversionRate = funnelReport?.conversionRate ?? 0;
-  const leadsCount = funnelReport?.counts?.lead_created ?? 0;
-  const appointmentsCount = funnelReport?.counts?.appointment_booked ?? 0;
-  const agendedCalls = appointmentsReport?.byStatus?.AGENDADA ?? 0;
-
-  const topOrigins = useMemo(() => leadsByOrigin.slice(0, 4), [leadsByOrigin]);
-  const weeklySeries = appointmentsReport?.byWeek ?? [];
-  const funnelBreakdown = useMemo(() => {
-    if (!funnelReport) return [];
-    return Object.entries(funnelReport.counts).map(([stage, total]) => ({
-      label: stage.replace(/_/g, ' '),
-      total
+  const statusCards = useMemo(() => {
+    return (dashboard?.top5Statuses ?? []).map((item) => ({
+      key: item.status,
+      label: stageLabels[item.status] ?? item.status,
+      value: item.count,
+      helper:
+        dashboard?.totalLeads && typeof item.percent === 'number'
+          ? `${item.percent}% do total`
+          : undefined
     }));
-  }, [funnelReport]);
+  }, [dashboard]);
+
+  const topOrigins = useMemo(() => (dashboard?.origins ?? []).slice(0, 10), [dashboard]);
 
   if (loading) {
     return <Loading />;
@@ -79,89 +75,86 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <h1 className="text-3xl font-semibold text-slate-900">Visao Geral</h1>
-
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Leads totais" value={leadsCount} helper="Novos contatos no funil" />
-        <MetricCard label="Calls agendadas" value={appointmentsCount} helper="Leads com call marcada" />
-        <MetricCard label="Calls confirmadas" value={agendedCalls} helper="Status agendada" />
-        <MetricCard
-          label="Taxa de conversao"
-          value={`${conversionRate}%`}
-          helper="Leads convertidos em call"
-        />
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-2xl bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Leads por origem</h2>
-          {topOrigins.length === 0 ? (
-            <p className="mt-4 text-sm text-gray-500">Sem dados suficientes para o periodo.</p>
-          ) : (
-            <ul className="mt-4 space-y-3">
-              {topOrigins.map((origin) => (
-                <li key={origin.label} className="flex items-center justify-between text-sm">
-                  <span className="font-medium text-gray-600">{origin.label}</span>
-                  <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-                    {origin.total}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="rounded-2xl bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Distribuicao do funil</h2>
-          {funnelBreakdown.length === 0 ? (
-            <p className="mt-4 text-sm text-gray-500">Nenhum dado de funil registrado.</p>
-          ) : (
-            <div className="mt-4 space-y-3">
-              {funnelBreakdown.map((stage) => (
-                <div key={stage.label} className="flex items-center justify-between text-sm">
-                  <span className="uppercase tracking-wide text-gray-500">{stage.label}</span>
-                  <span className="font-semibold text-slate-900">{stage.total}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-semibold text-slate-900">Dashboard</h1>
+        <p className="mt-1 text-sm text-gray-500">Visao do dia selecionado.</p>
       </div>
 
       <div className="rounded-2xl bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">Calls por semana</h2>
-        <div className="mt-4 h-64 w-full">
-          {weeklySeries.length === 0 ? (
-            <p className="text-sm text-gray-500">Nenhuma call registrada nesse periodo.</p>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={weeklySeries}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="label" stroke="#94a3b8" />
-                <YAxis stroke="#94a3b8" allowDecimals={false} />
-                <Tooltip />
-                <Bar dataKey="total" fill="#d4b26e" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Filtro por data</h2>
+            <p className="text-xs text-gray-500">Padrao: hoje.</p>
+          </div>
+
+          <div className="flex flex-wrap items-end gap-3 text-sm">
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-gray-600">Data</span>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none focus:border-primary"
+              />
+            </label>
+
+            <button
+              type="button"
+              onClick={() => void fetchDashboard()}
+              className="h-10 rounded-lg bg-primary px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary/90"
+            >
+              Atualizar
+            </button>
+          </div>
         </div>
       </div>
 
+      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-5">
+        {statusCards.map((card) => (
+          <MetricCard
+            key={card.key}
+            label={card.label}
+            value={card.value}
+            helper={card.helper}
+            accent={card.value ? 'green' : 'gray'}
+          />
+        ))}
+      </div>
+
       <div className="rounded-2xl bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">Calls por status</h2>
-        <div className="mt-4 flex flex-wrap gap-4">
-          {appointmentsReport && Object.keys(appointmentsReport.byStatus).length > 0 ? (
-            Object.entries(appointmentsReport.byStatus).map(([status, total]) => (
-              <div key={status} className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
-                <p className="font-semibold capitalize text-gray-600">{status.replace(/_/g, ' ').toLowerCase()}</p>
-                <p className="text-lg font-bold text-primary">{total}</p>
-              </div>
-            ))
-          ) : (
-            <p className="text-sm text-gray-500">Sem informacoes de status.</p>
-          )}
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Origem dos leads</h2>
+            <p className="text-xs text-gray-500">Ranking por volume no dia selecionado.</p>
+          </div>
+          <MetricCard label="Total de leads" value={dashboard?.totalLeads ?? 0} accent="gray" />
         </div>
+
+        {topOrigins.length === 0 ? (
+          <p className="mt-4 text-sm text-gray-500">Sem leads para a data selecionada.</p>
+        ) : (
+          <div className="mt-4 overflow-hidden rounded-xl border border-gray-200">
+            <table className="w-full table-fixed">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Origem</th>
+                  <th className="w-32 px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-600">Quantidade</th>
+                  <th className="w-24 px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-600">%</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {topOrigins.map((item) => (
+                  <tr key={item.origin} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm font-medium text-gray-700">{item.origin}</td>
+                    <td className="px-4 py-3 text-right text-sm font-semibold text-slate-900">{item.count}</td>
+                    <td className="px-4 py-3 text-right text-sm text-gray-600">{item.percent ?? 0}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

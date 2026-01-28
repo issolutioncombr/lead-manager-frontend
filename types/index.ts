@@ -145,3 +145,22 @@ export interface AppointmentsReport {
   byStatus: Record<string, number>;
   byWeek: TimeSeriesItem[];
 }
+
+export interface DashboardStatusItem {
+  status: string;
+  count: number;
+  percent?: number;
+}
+
+export interface DashboardOriginItem {
+  origin: string;
+  count: number;
+  percent?: number;
+}
+
+export interface DashboardResponse {
+  date: string;
+  totalLeads: number;
+  top5Statuses: DashboardStatusItem[];
+  origins: DashboardOriginItem[];
+}
