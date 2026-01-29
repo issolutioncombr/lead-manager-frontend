@@ -181,10 +181,15 @@ export default function IntegrationsPage() {
   const [isEvolutionQrRefreshing, setIsEvolutionQrRefreshing] = useState(false);
   const [isEvolutionCreatingInstance, setIsEvolutionCreatingInstance] = useState(false);
   const [isEvolutionCreateModalOpen, setIsEvolutionCreateModalOpen] = useState(false);
+  const [isEvolutionRegisterModalOpen, setIsEvolutionRegisterModalOpen] = useState(false);
+  const [isEvolutionRegisteringExisting, setIsEvolutionRegisteringExisting] = useState(false);
   const [selectedEvolutionSlot, setSelectedEvolutionSlot] =
     useState<(typeof EVOLUTION_INSTANCE_PRESETS)[number] | null>(null);
   const [evolutionInstanceNameInput, setEvolutionInstanceNameInput] = useState('');
+  const [evolutionRegisterNameInput, setEvolutionRegisterNameInput] = useState('');
+  const [evolutionRegisterTokenInput, setEvolutionRegisterTokenInput] = useState('');
   const [evolutionCreateError, setEvolutionCreateError] = useState<string | null>(null);
+  const [evolutionRegisterError, setEvolutionRegisterError] = useState<string | null>(null);
   const [evolutionRemovingInstanceId, setEvolutionRemovingInstanceId] = useState<string | null>(null);
   const [evolutionInstancePendingRemoval, setEvolutionInstancePendingRemoval] =
     useState<EvolutionSession | null>(null);
@@ -685,6 +690,16 @@ export default function IntegrationsPage() {
     [evolutionSlotAssignments, setFeedback, usedEvolutionSlots]
   );
 
+  const handleOpenEvolutionRegisterModal = useCallback(() => {
+    setEvolutionError(null);
+    setEvolutionModalError(null);
+    setEvolutionRegisterError(null);
+    setFeedback(null);
+    setEvolutionRegisterNameInput('');
+    setEvolutionRegisterTokenInput('');
+    setIsEvolutionRegisterModalOpen(true);
+  }, []);
+
   
 
   
@@ -821,6 +836,59 @@ export default function IntegrationsPage() {
     [handleEvolutionCreateSubmit]
   );
 
+  const handleEvolutionRegisterSubmit = useCallback(async () => {
+    const trimmedName = evolutionRegisterNameInput.trim();
+    const trimmedToken = evolutionRegisterTokenInput.trim();
+
+    if (!trimmedName) {
+      setEvolutionRegisterError('Informe um nome para a instancia.');
+      return;
+    }
+
+    if (!trimmedToken) {
+      setEvolutionRegisterError('Informe o token da instancia existente.');
+      return;
+    }
+
+    if (createdInstanceNames.has(trimmedName)) {
+      setEvolutionRegisterError('Ja existe uma instancia com esse nome.');
+      return;
+    }
+
+    setEvolutionRegisterError(null);
+    setEvolutionError(null);
+    setFeedback(null);
+    setIsEvolutionRegisteringExisting(true);
+
+    try {
+      const { data } = await api.post<EvolutionSession>('/integrations/evolution/instances/register', {
+        instanceName: trimmedName,
+        token: trimmedToken
+      });
+
+      updateSelectedEvolutionInstanceId(data.instanceId);
+      await loadEvolutionStatus(data.instanceId);
+      setEvolutionPhoneInput('');
+      setFeedback({ type: 'success', message: `Instancia ${trimmedName} cadastrada com sucesso.` });
+      setIsEvolutionRegisterModalOpen(false);
+      setEvolutionRegisterNameInput('');
+      setEvolutionRegisterTokenInput('');
+    } catch (err) {
+      console.error(err);
+      setEvolutionRegisterError('Nao foi possivel cadastrar a instancia existente.');
+    } finally {
+      setIsEvolutionRegisteringExisting(false);
+    }
+  }, [createdInstanceNames, evolutionRegisterNameInput, evolutionRegisterTokenInput, loadEvolutionStatus, updateSelectedEvolutionInstanceId]);
+
+  const handleEvolutionRegisterFormSubmit = useCallback(
+    async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      await handleEvolutionRegisterSubmit();
+    },
+    [handleEvolutionRegisterSubmit]
+  );
+
   const handleEvolutionDisconnect = useCallback(async () => {
     if (!evolutionSession?.instanceId) {
       return;
@@ -883,6 +951,36 @@ export default function IntegrationsPage() {
       } finally {
         setEvolutionRemovingInstanceId(null);
         setEvolutionInstancePendingRemoval(null);
+      }
+    },
+    [loadEvolutionStatus]
+  );
+
+  const handleEvolutionDetachInstance = useCallback(
+    async (instance: EvolutionSession) => {
+      const instanceId = instance.instanceId;
+      if (!instanceId) {
+        return;
+      }
+
+      setEvolutionError(null);
+      setEvolutionModalError(null);
+      setEvolutionPhoneInput('');
+      setFeedback(null);
+      setEvolutionRemovingInstanceId(instanceId);
+
+      try {
+        await api.delete(`/integrations/evolution/instances/${instanceId}/detach`);
+        await loadEvolutionStatus();
+        setFeedback({
+          type: 'success',
+          message: `Instancia ${instance.name ?? instanceId} removida do usuario.`
+        });
+      } catch (err) {
+        console.error(err);
+        setEvolutionError('Nao foi possivel remover a instancia do usuario.');
+      } finally {
+        setEvolutionRemovingInstanceId(null);
       }
     },
     [loadEvolutionStatus]
@@ -1386,6 +1484,14 @@ export default function IntegrationsPage() {
               </span>
             )}
             <button
+              type="button"
+              onClick={handleOpenEvolutionRegisterModal}
+              disabled={isEvolutionCreatingInstance || evolutionRemovingInstanceId !== null}
+              className="min-w-[12rem] rounded-lg border border-primary px-4 py-2 text-left text-sm font-semibold text-primary transition hover:bg-primary/10 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400"
+            >
+              Cadastrar instância existente
+            </button>
+            <button
               onClick={() => void handleEvolutionConnect()}
               disabled={
                 isEvolutionActionLoading ||
@@ -1509,13 +1615,22 @@ export default function IntegrationsPage() {
                       Detalhes
                     </button>
                     <button
+                      onClick={() => handleEvolutionDetachInstance(instance)}
+                      disabled={
+                        evolutionRemovingInstanceId === instance.instanceId || isEvolutionCreatingInstance
+                      }
+                      className="rounded-lg border border-amber-300 px-4 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-amber-300"
+                    >
+                      {evolutionRemovingInstanceId === instance.instanceId ? 'Removendo...' : 'Remover do usuário'}
+                    </button>
+                    <button
                       onClick={() => requestEvolutionRemoveInstance(instance)}
                       disabled={
                         evolutionRemovingInstanceId === instance.instanceId || isEvolutionCreatingInstance
                       }
                       className="rounded-lg border border-red-300 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-red-300"
                     >
-                      {evolutionRemovingInstanceId === instance.instanceId ? 'Removendo...' : 'Remover'}
+                      {evolutionRemovingInstanceId === instance.instanceId ? 'Removendo...' : 'Remover da Evolution'}
                     </button>
                   </div>
                 </div>
@@ -1613,6 +1728,61 @@ export default function IntegrationsPage() {
               className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-dark disabled:cursor-not-allowed disabled:bg-gray-300"
             >
               {isEvolutionCreatingInstance ? 'Criando instancia...' : 'Criar instancia'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        title="Cadastrar instância existente"
+        isOpen={isEvolutionRegisterModalOpen}
+        onClose={() => setIsEvolutionRegisterModalOpen(false)}
+      >
+        <form onSubmit={handleEvolutionRegisterFormSubmit} className="space-y-4">
+          <p className="text-sm text-gray-600">Informe o nome e o token da instância já criada na Evolution.</p>
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-slate-700" htmlFor="evolution-register-name">Nome</label>
+            <input
+              id="evolution-register-name"
+              type="text"
+              value={evolutionRegisterNameInput}
+              onChange={(e) => setEvolutionRegisterNameInput(e.target.value)}
+              placeholder="Ex.: Whatsapp IA 8435"
+              disabled={isEvolutionRegisteringExisting}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:bg-gray-100"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-slate-700" htmlFor="evolution-register-token">Token</label>
+            <input
+              id="evolution-register-token"
+              type="text"
+              value={evolutionRegisterTokenInput}
+              onChange={(e) => setEvolutionRegisterTokenInput(e.target.value)}
+              placeholder="Informe o token da instância"
+              disabled={isEvolutionRegisteringExisting}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:bg-gray-100"
+            />
+            <p className="text-xs text-gray-500">Esse token aparece no painel da Evolution da instância.</p>
+          </div>
+          {evolutionRegisterError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{evolutionRegisterError}</div>
+          )}
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setIsEvolutionRegisterModalOpen(false)}
+              disabled={isEvolutionRegisteringExisting}
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-400"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={isEvolutionRegisteringExisting}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-dark disabled:cursor-not-allowed disabled:bg-gray-300"
+            >
+              {isEvolutionRegisteringExisting ? 'Cadastrando...' : 'Cadastrar'}
             </button>
           </div>
         </form>
