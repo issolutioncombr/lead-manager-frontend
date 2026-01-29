@@ -19,8 +19,7 @@ const normalizeScopes = (value?: string) =>
   'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/userinfo.email';
 
 const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? '';
-const fallbackRedirectUri =
-  process.env.NEXT_PUBLIC_GOOGLE_REDIRECT_URI ?? 'http://localhost:3001/api/google/oauth/callback';
+const fallbackRedirectUri = process.env.NEXT_PUBLIC_GOOGLE_REDIRECT_URI ?? '';
 
 type GoogleOAuthStateResponse = {
   state: string;
@@ -210,10 +209,7 @@ export default function IntegrationsPage() {
 
   
 
-  const scopes = useMemo(
-    () => normalizeScopes(process.env.NEXT_PUBLIC_GOOGLE_OAUTH_SCOPES),
-    []
-  );
+  const scopes = useMemo(() => normalizeScopes(process.env.NEXT_PUBLIC_GOOGLE_OAUTH_SCOPES), []);
 
   const createdInstanceNames = useMemo(() => {
     const names = new Set<string>();
