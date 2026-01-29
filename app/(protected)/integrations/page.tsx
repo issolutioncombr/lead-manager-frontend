@@ -1200,7 +1200,7 @@ export default function IntegrationsPage() {
       <header>
         <h1 className="text-3xl font-semibold text-slate-900">Integrações</h1>
         <p className="mt-2 text-sm text-slate-500">
-          Conecte a agenda do Google e o WhatsApp via Evolution para automatizar o atendimento.
+          Conecte a agenda do Google e o WhatsApp via Evolution para automatizar o atendimento1.
         </p>
       </header>
       {feedback && (
