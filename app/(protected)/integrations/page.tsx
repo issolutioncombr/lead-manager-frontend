@@ -20,6 +20,7 @@ const normalizeScopes = (value?: string) =>
 
 const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? '';
 const fallbackRedirectUri = process.env.NEXT_PUBLIC_GOOGLE_REDIRECT_URI ?? '';
+const META_OAUTH_ENABLED = (process.env.NEXT_PUBLIC_ENABLE_META_OAUTH ?? 'false') === 'true';
 
 type GoogleOAuthStateResponse = {
   state: string;
@@ -346,7 +347,9 @@ export default function IntegrationsPage() {
 
     void loadGoogleStatus();
     void loadPaypalStatus();
-    void loadMetaStatus();
+    if (META_OAUTH_ENABLED) {
+      void loadMetaStatus();
+    }
     void loadEvolutionStatus();
   }, [authLoading, user, loadGoogleStatus, loadPaypalStatus, loadMetaStatus, loadEvolutionStatus]);
 
@@ -382,7 +385,9 @@ export default function IntegrationsPage() {
       if (integration === 'paypal') {
         loadPaypalStatus();
       } else if (integration === 'meta-whatsapp') {
-        loadMetaStatus();
+        if (META_OAUTH_ENABLED) {
+          loadMetaStatus();
+        }
       } else {
         loadGoogleStatus();
       }
