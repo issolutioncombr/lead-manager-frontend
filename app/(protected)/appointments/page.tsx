@@ -121,7 +121,7 @@ export default function AppointmentsPage() {
         setIsLoading(false);
       }
     },
-    [selectedStatus, searchTerm, startDate, endDate]
+    [selectedStatus, searchTerm, startDate, endDate, currentPage]
   );
 
   const fetchLeads = useCallback(

@@ -155,8 +155,12 @@ export const Navbar = () => {
     } else {
       baseLinks.push(attendanceLink);
     }
+    if (user?.isAdmin || user?.role === 'admin') {
+      baseLinks.splice(1, 0, { href: '/approvals', label: 'Aprovações', icon: 'users' });
+      baseLinks.splice(2, 0, { href: '/users', label: 'Usuários', icon: 'users' });
+    }
     return baseLinks;
-  }, [seller]);
+  }, [seller, user?.isAdmin, user?.role]);
 
   const handleLogout = () => {
     if (isLoggingOut) return;
@@ -306,4 +310,3 @@ export const Navbar = () => {
     </>
   );
 };
-

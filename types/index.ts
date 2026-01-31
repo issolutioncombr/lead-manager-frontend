@@ -4,6 +4,8 @@ export interface User {
   email: string;
   role: string;
   apiKey?: string;
+  isAdmin?: boolean;
+  companyName?: string | null;
 }
 
 export interface AuthenticatedSeller {

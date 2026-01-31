@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
+import Image from 'next/image';
 
 import { ConfirmDialog } from '../../../components/ConfirmDialog';
 import { Modal } from '../../../components/Modal';
@@ -354,9 +355,11 @@ export default function CampaignsPage() {
 
           {formState.imageUrl && (
             <div className="flex items-start gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3">
-              <img
+              <Image
                 src={formState.imageUrl}
                 alt="Imagem da campanha selecionada"
+                width={64}
+                height={64}
                 className="h-16 w-16 rounded object-cover"
               />
               <div className="space-y-2">

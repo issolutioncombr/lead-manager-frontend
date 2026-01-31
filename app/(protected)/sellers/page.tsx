@@ -39,6 +39,7 @@ export default function SellersPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const latestRequestRef = useRef(0);
   const hasFetchedInitial = useRef(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const isSearchDirty = search !== lastFetchedSearch;
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total]);
@@ -189,15 +190,17 @@ export default function SellersPage() {
     event.preventDefault();
     try {
       setError(null);
+      setSuccessMessage(null);
       const payload = {
         name: formState.name,
-        email: formState.email || undefined,
+        email: formState.email,
         contactNumber: formState.contactNumber || undefined
       };
       if (editingSellerId) {
         await api.patch(`/sellers/${editingSellerId}`, payload);
       } else {
         await api.post('/sellers', payload);
+        setSuccessMessage('Vendedor criado. No primeiro acesso, ele deverá configurar a senha.');
       }
       setIsModalOpen(false);
       await fetchSellers({
@@ -276,6 +279,11 @@ export default function SellersPage() {
       </div>
 
       <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        {successMessage && (
+          <div className="mb-3 rounded-lg border border-primary/30 bg-primary/10 p-3 text-sm text-primary">
+            {successMessage}
+          </div>
+        )}
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex-1 min-w-[220px] text-xs font-semibold text-gray-600">
             Buscar vendedor
@@ -425,6 +433,7 @@ export default function SellersPage() {
             Email
             <input
               type="email"
+              required
               value={formState.email}
               onChange={(event) => setFormState((prev) => ({ ...prev, email: event.target.value }))}
               placeholder="email@exemplo.com"

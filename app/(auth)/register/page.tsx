@@ -9,7 +9,7 @@ import api from '../../../lib/api';
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '' });
+  const [form, setForm] = useState({ name: '', companyName: '', email: '', password: '', confirm: '' });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -26,11 +26,12 @@ export default function RegisterPage() {
     try {
       await api.post('/auth/register', {
         name: form.name,
+        companyName: form.companyName,
         email: form.email,
         password: form.password
       });
       setDone(true);
-      setTimeout(() => router.push('/login'), 1500);
+      setTimeout(() => router.push('/login'), 2000);
     } catch (err) {
       setError('Nao foi possivel criar a conta. Verifique os dados.');
     } finally {
@@ -79,7 +80,7 @@ export default function RegisterPage() {
 
           {done ? (
             <div className="mb-4 rounded-lg border border-primary/30 bg-primary/10 p-3 text-sm text-primary">
-              Conta criada com sucesso. Redirecionando para o login...
+              Cadastro enviado. O admin irá aprovar o usuário. Redirecionando para o login...
             </div>
           ) : (
             error && (
@@ -96,6 +97,18 @@ export default function RegisterPage() {
               onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
               className="mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-2 focus:border-primary focus:bg-white focus:outline-none"
               placeholder="Ex.: Clinica Exemplo"
+            />
+          </label>
+
+          <label className="mb-4 block text-sm font-medium text-gray-700">
+            Nome da empresa
+            <input
+              type="text"
+              required
+              value={form.companyName}
+              onChange={(event) => setForm((prev) => ({ ...prev, companyName: event.target.value }))}
+              className="mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-2 focus:border-primary focus:bg-white focus:outline-none"
+              placeholder="Ex.: Clinica Exemplo LTDA"
             />
           </label>
 

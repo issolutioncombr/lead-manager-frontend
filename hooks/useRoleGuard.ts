@@ -13,8 +13,11 @@ export const useRoleGuard = (allowedRoles: string[], redirectTo = '/dashboard') 
     if (!user?.role) {
       return false;
     }
+    if (user.isAdmin && allowedRoles.includes('admin')) {
+      return true;
+    }
     return allowedRoles.includes(user.role);
-  }, [allowedRoles, user?.role]);
+  }, [allowedRoles, user?.role, user?.isAdmin]);
 
   useEffect(() => {
     if (loading) {
