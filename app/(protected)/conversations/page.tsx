@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import api from '../../../lib/api';
 import { Lead } from '../../../types';
 
@@ -26,10 +26,15 @@ export default function ConversationsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [messagesTotal, setMessagesTotal] = useState(0);
+  const [messagePage, setMessagePage] = useState(1);
+  const [messageLimit, setMessageLimit] = useState(50);
+  const [textOnly, setTextOnly] = useState(false);
   const [isLoadingLeads, setIsLoadingLeads] = useState(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const latestRequestRef = useRef(0);
+  const [leadSearch, setLeadSearch] = useState('');
 
   const sortedLeads = useMemo(() => {
     return [...leads].sort((a, b) => {
@@ -44,7 +49,9 @@ export default function ConversationsPage() {
       try {
         setIsLoadingLeads(true);
         setError(null);
-        const resp = await api.get<LeadsResponse>('/leads', { params: { page: 1, limit: 200 } });
+        const resp = await api.get<LeadsResponse>('/leads', {
+          params: { page: 1, limit: 200, search: leadSearch || undefined }
+        });
         setLeads(resp.data.data);
       } catch (e) {
         setError('Não foi possível carregar os leads.');
@@ -53,17 +60,22 @@ export default function ConversationsPage() {
       }
     };
     fetchLeads();
-  }, []);
+  }, [leadSearch]);
 
   const openLead = async (lead: Lead) => {
     setSelectedLead(lead);
+    setMessagePage(1);
     const reqId = ++latestRequestRef.current;
     try {
       setIsLoadingMessages(true);
       setError(null);
-      const resp = await api.get<Message[]>(`/leads/${lead.id}/messages`);
+      const resp = await api.get<{ data: Message[]; total: number; page: number; limit: number }>(
+        `/leads/${lead.id}/messages`,
+        { params: { page: 1, limit: messageLimit, textOnly } }
+      );
       if (reqId !== latestRequestRef.current) return;
-      setMessages(resp.data);
+      setMessages(resp.data.data);
+      setMessagesTotal(resp.data.total);
     } catch (e) {
       if (reqId === latestRequestRef.current) {
         setError('Não foi possível carregar a conversa.');
@@ -75,12 +87,69 @@ export default function ConversationsPage() {
     }
   };
 
+  const loadMessagesPage = async (page: number) => {
+    if (!selectedLead) return;
+    const reqId = ++latestRequestRef.current;
+    try {
+      setIsLoadingMessages(true);
+      setError(null);
+      const resp = await api.get<{ data: Message[]; total: number; page: number; limit: number }>(
+        `/leads/${selectedLead.id}/messages`,
+        { params: { page, limit: messageLimit, textOnly } }
+      );
+      if (reqId !== latestRequestRef.current) return;
+      setMessages(resp.data.data);
+      setMessagesTotal(resp.data.total);
+      setMessagePage(resp.data.page);
+    } catch (e) {
+      if (reqId === latestRequestRef.current) {
+        setError('Não foi possível carregar a conversa.');
+      }
+    } finally {
+      if (reqId === latestRequestRef.current) {
+        setIsLoadingMessages(false);
+      }
+    }
+  };
+
+  const handleToggleTextOnly = async () => {
+    const next = !textOnly;
+    setTextOnly(next);
+    setMessagePage(1);
+    if (selectedLead) {
+      await loadMessagesPage(1);
+    }
+  };
+
+  const handleLeadsSearchChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    const digits = value.replace(/\D+/g, '');
+    setLeadSearch(digits);
+  };
+
+  const messagesFrom = useMemo(() => {
+    if (messagesTotal === 0) return 0;
+    return (messagePage - 1) * messageLimit + 1;
+  }, [messagePage, messageLimit, messagesTotal]);
+
+  const messagesTo = useMemo(() => {
+    if (messagesTotal === 0) return 0;
+    return Math.min(messagePage * messageLimit, messagesTotal);
+  }, [messagePage, messageLimit, messagesTotal]);
+
   return (
     <div className="flex h-[calc(100vh-100px)] gap-4">
       <aside className="w-80 shrink-0 rounded-lg border bg-white">
         <div className="border-b px-4 py-3">
           <h2 className="text-lg font-semibold">Conversas</h2>
-          <p className="text-xs text-gray-500">Selecione um lead para abrir o chat</p>
+          <div className="mt-2">
+            <input
+              value={leadSearch}
+              onChange={handleLeadsSearchChange}
+              placeholder="Buscar por número"
+              className="w-full rounded-md border px-3 py-2 text-sm"
+            />
+          </div>
         </div>
         <div className="h-full overflow-y-auto">
           {isLoadingLeads ? (
@@ -116,6 +185,17 @@ export default function ConversationsPage() {
           <p className="text-xs text-gray-500">
             {selectedLead ? selectedLead.contact ?? '' : 'Clique em um lead para abrir a conversa'}
           </p>
+          <div className="mt-2 flex items-center gap-3">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={textOnly} onChange={handleToggleTextOnly} />
+              Apenas mensagens com texto
+            </label>
+            {selectedLead && (
+              <div className="text-xs text-gray-500">
+                Mostrando {messagesFrom}–{messagesTo} de {messagesTotal}
+              </div>
+            )}
+          </div>
         </div>
         <div className="flex h-full flex-col">
           <div className="flex-1 space-y-4 overflow-y-auto p-4">
@@ -143,6 +223,27 @@ export default function ConversationsPage() {
             {selectedLead && !isLoadingMessages && messages.length === 0 && (
               <div className="text-sm text-gray-500">Não há mensagens para este lead.</div>
             )}
+          </div>
+          <div className="flex items-center justify-between border-t p-3">
+            <div className="text-xs text-gray-500">
+              Página {messagePage}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => loadMessagesPage(Math.max(1, messagePage - 1))}
+                disabled={isLoadingMessages || messagePage <= 1}
+                className="rounded-md border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Anterior
+              </button>
+              <button
+                onClick={() => loadMessagesPage(messagesTo < messagesTotal ? messagePage + 1 : messagePage)}
+                disabled={isLoadingMessages || messagesTo >= messagesTotal}
+                className="rounded-md border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Próxima
+              </button>
+            </div>
           </div>
           {error && <div className="border-t p-3 text-sm text-red-600">{error}</div>}
         </div>
