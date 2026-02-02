@@ -665,28 +665,31 @@ export default function IntegrationsPage() {
   );
 
   const handleOpenEvolutionCreateModal = useCallback(
-    (slotId: string) => {
-      const preset = EVOLUTION_INSTANCE_PRESETS.find((item) => item.id === slotId);
-      if (!preset) {
-        return;
+    (slotId?: string) => {
+      if (slotId && slotId.length > 0) {
+        const preset = EVOLUTION_INSTANCE_PRESETS.find((item) => item.id === slotId);
+        if (!preset) {
+          return;
+        }
+        if (usedEvolutionSlots.has(preset.id)) {
+          const assigned = evolutionSlotAssignments.get(preset.id);
+          setEvolutionError(
+            assigned?.name
+              ? `Slot ${preset.name} ja esta em uso pela instancia ${assigned.name}.`
+              : `Slot ${preset.name} ja esta em uso.`
+          );
+          return;
+        }
+        setSelectedEvolutionSlot(preset);
+        setEvolutionInstanceNameInput(preset.name);
+      } else {
+        setSelectedEvolutionSlot(null);
+        setEvolutionInstanceNameInput('');
       }
-
-      if (usedEvolutionSlots.has(preset.id)) {
-        const assigned = evolutionSlotAssignments.get(preset.id);
-        setEvolutionError(
-          assigned?.name
-            ? `Slot ${preset.name} ja esta em uso pela instancia ${assigned.name}.`
-            : `Slot ${preset.name} ja esta em uso.`
-        );
-        return;
-      }
-
       setEvolutionError(null);
       setEvolutionModalError(null);
       setEvolutionCreateError(null);
       setFeedback(null);
-      setSelectedEvolutionSlot(preset);
-      setEvolutionInstanceNameInput(preset.name);
       setIsEvolutionCreateModalOpen(true);
     },
     [evolutionSlotAssignments, setFeedback, usedEvolutionSlots]
@@ -1427,47 +1430,15 @@ export default function IntegrationsPage() {
           </div>
           <div className="flex flex-col items-start gap-3 md:items-end">
             <div className="flex flex-wrap gap-2">
-              {EVOLUTION_INSTANCE_PRESETS.map((preset, index) => {
-                const assignedInstance = evolutionSlotAssignments.get(preset.id);
-                const isInUse = Boolean(assignedInstance);
-                const buttonDisabled =
-                  isInUse || isEvolutionCreatingInstance || evolutionRemovingInstanceId !== null;
-                const label = isInUse
-                  ? `Instancia ${index + 1} em uso`
-                  : `Adicionar instancia ${index + 1}`;
-
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => handleOpenEvolutionCreateModal(preset.id)}
-                    disabled={buttonDisabled}
-                    className={`min-w-[12rem] rounded-lg border px-4 py-2 text-left text-sm font-semibold transition ${
-                      isInUse
-                        ? 'border-gray-200 bg-gray-100 text-gray-500'
-                        : 'border-primary text-primary hover:bg-primary/10'
-                    } disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400`}
-                    title={
-                      isInUse
-                        ? `Em uso por ${assignedInstance?.name ?? 'outra instancia'}`
-                        : `Webhook: ${preset.webhookUrl}`
-                    }
-                  >
-                    <span className="block">{label}</span>
-                    {isInUse && assignedInstance?.name && (
-                      <span className="block text-xs font-normal text-gray-500">
-                        {assignedInstance.name}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
+              <button
+                type="button"
+                onClick={() => handleOpenEvolutionCreateModal()}
+                disabled={isEvolutionCreatingInstance || evolutionRemovingInstanceId !== null}
+                className="min-w-[12rem] rounded-lg border border-primary px-4 py-2 text-left text-sm font-semibold text-primary transition hover:bg-primary/10 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400"
+              >
+                Adicionar instância
+              </button>
             </div>
-            {!hasAvailableEvolutionPreset && (
-              <span className="text-xs text-gray-500">
-                Todos os slots Evolution estao em uso. Remova uma instancia para liberar um slot.
-              </span>
-            )}
             <button
               type="button"
               onClick={handleOpenEvolutionRegisterModal}
