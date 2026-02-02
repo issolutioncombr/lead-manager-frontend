@@ -1169,7 +1169,7 @@ export default function IntegrationsPage() {
 
 
       <section className="rounded-2xl bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-4 md:flex-row md:flex-wrap md:items-center md:justify-between">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Google Calendar</h2>
             <p className="mt-1 max-w-xl text-sm text-gray-500">
@@ -1467,7 +1467,7 @@ export default function IntegrationsPage() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <h3 className="text-base font-semibold text-slate-900">
+                      <h3 className="text-base font-semibold text-slate-900 break-all">
                         {instance.name ?? instance.instanceId}
                       </h3>
                       <p className="mt-1 text-xs text-gray-400 break-all">{instance.instanceId}</p>
