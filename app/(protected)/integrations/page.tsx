@@ -183,8 +183,6 @@ export default function IntegrationsPage() {
   const [isEvolutionCreateModalOpen, setIsEvolutionCreateModalOpen] = useState(false);
   const [isEvolutionRegisterModalOpen, setIsEvolutionRegisterModalOpen] = useState(false);
   const [isEvolutionRegisteringExisting, setIsEvolutionRegisteringExisting] = useState(false);
-  const [selectedEvolutionSlot, setSelectedEvolutionSlot] =
-    useState<(typeof EVOLUTION_INSTANCE_PRESETS)[number] | null>(null);
   const [evolutionInstanceNameInput, setEvolutionInstanceNameInput] = useState('');
   const [evolutionWebhookUrlInput, setEvolutionWebhookUrlInput] = useState('');
   const [evolutionRegisterNameInput, setEvolutionRegisterNameInput] = useState('');
@@ -664,36 +662,14 @@ export default function IntegrationsPage() {
     ]
   );
 
-  const handleOpenEvolutionCreateModal = useCallback(
-    (slotId?: string) => {
-      if (slotId && slotId.length > 0) {
-        const preset = EVOLUTION_INSTANCE_PRESETS.find((item) => item.id === slotId);
-        if (!preset) {
-          return;
-        }
-        if (usedEvolutionSlots.has(preset.id)) {
-          const assigned = evolutionSlotAssignments.get(preset.id);
-          setEvolutionError(
-            assigned?.name
-              ? `Slot ${preset.name} ja esta em uso pela instancia ${assigned.name}.`
-              : `Slot ${preset.name} ja esta em uso.`
-          );
-          return;
-        }
-        setSelectedEvolutionSlot(preset);
-        setEvolutionInstanceNameInput(preset.name);
-      } else {
-        setSelectedEvolutionSlot(null);
-        setEvolutionInstanceNameInput('');
-      }
-      setEvolutionError(null);
-      setEvolutionModalError(null);
-      setEvolutionCreateError(null);
-      setFeedback(null);
-      setIsEvolutionCreateModalOpen(true);
-    },
-    [evolutionSlotAssignments, setFeedback, usedEvolutionSlots]
-  );
+  const handleOpenEvolutionCreateModal = useCallback(() => {
+    setEvolutionError(null);
+    setEvolutionModalError(null);
+    setEvolutionCreateError(null);
+    setFeedback(null);
+    setEvolutionInstanceNameInput('');
+    setIsEvolutionCreateModalOpen(true);
+  }, []);
 
   const handleOpenEvolutionRegisterModal = useCallback(() => {
     setEvolutionError(null);
@@ -732,29 +708,9 @@ export default function IntegrationsPage() {
 
   const handleEvolutionCreateSlotChange = useCallback(
     (slotId: string) => {
-      if (!slotId) {
-        setSelectedEvolutionSlot(null);
-        setEvolutionInstanceNameInput('');
-        setEvolutionCreateError(null);
-        return;
-      }
-
-      const preset = EVOLUTION_INSTANCE_PRESETS.find((item) => item.id === slotId) ?? null;
-      if (!preset) {
-        setSelectedEvolutionSlot(null);
-        setEvolutionCreateError('Slot selecionado e invalido.');
-        return;
-      }
-
-      if (usedEvolutionSlots.has(preset.id) && preset.id !== selectedEvolutionSlot?.id) {
-        setEvolutionCreateError('Slot selecionado ja esta em uso.');
-        return;
-      }
-
-      setSelectedEvolutionSlot(preset);
       setEvolutionCreateError(null);
     },
-    [selectedEvolutionSlot, usedEvolutionSlots]
+    []
   );
 
   const handleEvolutionCreateModalClose = useCallback(() => {
@@ -763,15 +719,13 @@ export default function IntegrationsPage() {
     }
 
     setIsEvolutionCreateModalOpen(false);
-    setSelectedEvolutionSlot(null);
     setEvolutionInstanceNameInput('');
     setEvolutionWebhookUrlInput('');
     setEvolutionCreateError(null);
   }, [isEvolutionCreatingInstance]);
 
   const handleEvolutionCreateSubmit = useCallback(async () => {
-    const preset = selectedEvolutionSlot;
-    const resolvedWebhook = preset?.webhookUrl ?? evolutionWebhookUrlInput.trim();
+    const resolvedWebhook = evolutionWebhookUrlInput.trim();
 
     setEvolutionCreateError(null);
     setEvolutionError(null);
@@ -780,9 +734,6 @@ export default function IntegrationsPage() {
 
     try {
       const payload: Record<string, unknown> = {};
-      if (preset?.id) {
-        payload.slotId = preset.id;
-      }
       if (resolvedWebhook) {
         payload.webhookUrl = resolvedWebhook;
       }
@@ -800,7 +751,6 @@ export default function IntegrationsPage() {
         message: `Instancia ${data.name ?? data.instanceId} criada com sucesso.`
       });
       setIsEvolutionCreateModalOpen(false);
-      setSelectedEvolutionSlot(null);
       setEvolutionInstanceNameInput('');
       setEvolutionWebhookUrlInput('');
     } catch (err) {
@@ -816,7 +766,6 @@ export default function IntegrationsPage() {
   }, [
     evolutionWebhookUrlInput,
     loadEvolutionStatus,
-    selectedEvolutionSlot,
     updateSelectedEvolutionInstanceId
   ]);
 
@@ -1436,7 +1385,7 @@ export default function IntegrationsPage() {
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => handleOpenEvolutionCreateModal()}
+                onClick={handleOpenEvolutionCreateModal}
                 disabled={isEvolutionCreatingInstance || evolutionRemovingInstanceId !== null}
                 className="min-w-[12rem] rounded-lg border border-primary px-4 py-2 text-left text-sm font-semibold text-primary transition hover:bg-primary/10 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400"
               >
@@ -1613,37 +1562,8 @@ export default function IntegrationsPage() {
       >
         <form onSubmit={handleEvolutionCreateFormSubmit} className="space-y-4">
           <p className="text-sm text-gray-600">
-            Selecione um slot pre-configurado ou informe um Webhook URL para criar uma nova instancia. O nome sera gerado automaticamente (ID do usuario + ID unico). Caso deixe ambos em branco, o sistema tentara usar um slot livre ou gerar um webhook automaticamente.
+            Crie uma nova instancia Evolution. O nome sera gerado automaticamente (ID do usuario + ID unico). Se nao informar um Webhook URL, o sistema usara o webhook interno padrao.
           </p>
-
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-slate-700" htmlFor="evolution-slot-select">
-              Slot Evolution
-            </label>
-            <select
-              id="evolution-slot-select"
-              value={selectedEvolutionSlot?.id ?? ''}
-              onChange={(event) => handleEvolutionCreateSlotChange(event.target.value)}
-              disabled={isEvolutionCreatingInstance}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:bg-gray-100"
-            >
-              <option value="">Selecione um slot</option>
-              {EVOLUTION_INSTANCE_PRESETS.map((preset) => {
-                const assignedInstance = evolutionSlotAssignments.get(preset.id);
-                const isDisabled =
-                  Boolean(assignedInstance) && preset.id !== selectedEvolutionSlot?.id;
-
-                return (
-                  <option key={preset.id} value={preset.id} disabled={isDisabled}>
-                    {`${preset.name}${assignedInstance ? ' - em uso' : ''}`}
-                  </option>
-                );
-              })}
-            </select>
-            <p className="text-xs text-gray-500">
-              Cada slot possui um webhook unico. Apenas um cliente pode utilizar cada slot.
-            </p>
-          </div>
 
           <div className="space-y-1">
             <label className="text-sm font-medium text-slate-700" htmlFor="evolution-webhook-url">
@@ -1658,15 +1578,8 @@ export default function IntegrationsPage() {
               disabled={isEvolutionCreatingInstance}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:bg-gray-100"
             />
-            <p className="text-xs text-gray-500">Opcional: informe um webhook caso nao utilize um slot.</p>
+            <p className="text-xs text-gray-500">Opcional: informe um webhook personalizado. Caso contrario, o sistema usara o webhook padrao interno.</p>
           </div>
-
-          {selectedEvolutionSlot && (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-              <strong className="font-semibold text-slate-700">Webhook:</strong>{' '}
-              <span className="break-all">{selectedEvolutionSlot.webhookUrl}</span>
-            </div>
-          )}
 
           {evolutionCreateError && (
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
