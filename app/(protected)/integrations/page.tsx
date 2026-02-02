@@ -770,23 +770,23 @@ export default function IntegrationsPage() {
     const preset = selectedEvolutionSlot;
     const resolvedWebhook = preset?.webhookUrl ?? evolutionWebhookUrlInput.trim();
 
-    if (!resolvedWebhook) {
-      setEvolutionCreateError('Informe um webhook valido ou selecione um slot Evolution pre-configurado.');
-      return;
-    }
-
     setEvolutionCreateError(null);
     setEvolutionError(null);
     setFeedback(null);
     setIsEvolutionCreatingInstance(true);
 
     try {
+      const payload: Record<string, unknown> = {};
+      if (preset?.id) {
+        payload.slotId = preset.id;
+      }
+      if (resolvedWebhook) {
+        payload.webhookUrl = resolvedWebhook;
+      }
+
       const { data } = await api.post<EvolutionSession>(
         '/integrations/evolution/instances/create',
-        {
-          webhookUrl: resolvedWebhook,
-          slotId: preset?.id
-        }
+        payload
       );
 
       updateSelectedEvolutionInstanceId(data.instanceId);
@@ -1638,7 +1638,7 @@ export default function IntegrationsPage() {
       >
         <form onSubmit={handleEvolutionCreateFormSubmit} className="space-y-4">
           <p className="text-sm text-gray-600">
-            Selecione um slot pre-configurado ou informe um Webhook URL para criar uma nova instancia. O nome sera gerado automaticamente (ID do usuario + ID unico).
+            Selecione um slot pre-configurado ou informe um Webhook URL para criar uma nova instancia. O nome sera gerado automaticamente (ID do usuario + ID unico). Caso deixe ambos em branco, o sistema tentara usar um slot livre ou gerar um webhook automaticamente.
           </p>
 
           <div className="space-y-1">
@@ -1683,7 +1683,7 @@ export default function IntegrationsPage() {
               disabled={isEvolutionCreatingInstance}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:bg-gray-100"
             />
-            <p className="text-xs text-gray-500">Informe um webhook valido caso nao utilize um slot.</p>
+            <p className="text-xs text-gray-500">Opcional: informe um webhook caso nao utilize um slot.</p>
           </div>
 
           {selectedEvolutionSlot && (
@@ -1710,10 +1710,7 @@ export default function IntegrationsPage() {
             </button>
             <button
               type="submit"
-              disabled={
-                isEvolutionCreatingInstance ||
-                (!selectedEvolutionSlot && !evolutionWebhookUrlInput.trim())
-              }
+              disabled={isEvolutionCreatingInstance}
               className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-dark disabled:cursor-not-allowed disabled:bg-gray-300"
             >
               {isEvolutionCreatingInstance ? 'Criando instancia...' : 'Criar instancia'}
