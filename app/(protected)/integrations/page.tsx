@@ -804,8 +804,12 @@ export default function IntegrationsPage() {
       setEvolutionInstanceNameInput('');
       setEvolutionWebhookUrlInput('');
     } catch (err) {
+      const message =
+        (err as any)?.response?.data?.message ??
+        (err as any)?.message ??
+        'Nao foi possivel criar a instancia Evolution.';
       console.error(err);
-      setEvolutionCreateError('Nao foi possivel criar a instancia Evolution.');
+      setEvolutionCreateError(message);
     } finally {
       setIsEvolutionCreatingInstance(false);
     }
