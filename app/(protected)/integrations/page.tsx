@@ -186,6 +186,7 @@ export default function IntegrationsPage() {
   const [selectedEvolutionSlot, setSelectedEvolutionSlot] =
     useState<(typeof EVOLUTION_INSTANCE_PRESETS)[number] | null>(null);
   const [evolutionInstanceNameInput, setEvolutionInstanceNameInput] = useState('');
+  const [evolutionWebhookUrlInput, setEvolutionWebhookUrlInput] = useState('');
   const [evolutionRegisterNameInput, setEvolutionRegisterNameInput] = useState('');
   const [evolutionRegisterTokenInput, setEvolutionRegisterTokenInput] = useState('');
   const [evolutionCreateError, setEvolutionCreateError] = useState<string | null>(null);
@@ -747,14 +748,7 @@ export default function IntegrationsPage() {
         return;
       }
 
-      const previousDefault = selectedEvolutionSlot?.name ?? '';
       setSelectedEvolutionSlot(preset);
-      setEvolutionInstanceNameInput((prev) => {
-        if (!prev || prev === previousDefault) {
-          return preset.name;
-        }
-        return prev;
-      });
       setEvolutionCreateError(null);
     },
     [selectedEvolutionSlot, usedEvolutionSlots]
@@ -768,25 +762,16 @@ export default function IntegrationsPage() {
     setIsEvolutionCreateModalOpen(false);
     setSelectedEvolutionSlot(null);
     setEvolutionInstanceNameInput('');
+    setEvolutionWebhookUrlInput('');
     setEvolutionCreateError(null);
   }, [isEvolutionCreatingInstance]);
 
   const handleEvolutionCreateSubmit = useCallback(async () => {
     const preset = selectedEvolutionSlot;
-    const trimmedName = evolutionInstanceNameInput.trim();
+    const resolvedWebhook = preset?.webhookUrl ?? evolutionWebhookUrlInput.trim();
 
-    if (!preset) {
-      setEvolutionCreateError('Selecione um slot Evolution disponivel.');
-      return;
-    }
-
-    if (!trimmedName) {
-      setEvolutionCreateError('Informe um nome para a instancia.');
-      return;
-    }
-
-    if (createdInstanceNames.has(trimmedName)) {
-      setEvolutionCreateError('Ja existe uma instancia com esse nome.');
+    if (!resolvedWebhook) {
+      setEvolutionCreateError('Informe um webhook valido ou selecione um slot Evolution pre-configurado.');
       return;
     }
 
@@ -799,9 +784,8 @@ export default function IntegrationsPage() {
       const { data } = await api.post<EvolutionSession>(
         '/integrations/evolution/instances/create',
         {
-          instanceName: trimmedName,
-          webhookUrl: preset.webhookUrl,
-          slotId: preset.id
+          webhookUrl: resolvedWebhook,
+          slotId: preset?.id
         }
       );
 
@@ -810,11 +794,12 @@ export default function IntegrationsPage() {
       setEvolutionPhoneInput('');
       setFeedback({
         type: 'success',
-        message: `Instancia ${trimmedName} criada com sucesso.`
+        message: `Instancia ${data.name ?? data.instanceId} criada com sucesso.`
       });
       setIsEvolutionCreateModalOpen(false);
       setSelectedEvolutionSlot(null);
       setEvolutionInstanceNameInput('');
+      setEvolutionWebhookUrlInput('');
     } catch (err) {
       console.error(err);
       setEvolutionCreateError('Nao foi possivel criar a instancia Evolution.');
@@ -822,8 +807,7 @@ export default function IntegrationsPage() {
       setIsEvolutionCreatingInstance(false);
     }
   }, [
-    createdInstanceNames,
-    evolutionInstanceNameInput,
+    evolutionWebhookUrlInput,
     loadEvolutionStatus,
     selectedEvolutionSlot,
     updateSelectedEvolutionInstanceId
@@ -1654,7 +1638,7 @@ export default function IntegrationsPage() {
       >
         <form onSubmit={handleEvolutionCreateFormSubmit} className="space-y-4">
           <p className="text-sm text-gray-600">
-            Escolha um dos slots pre-configurados e defina um nome para a nova instancia.
+            Selecione um slot pre-configurado ou informe um Webhook URL para criar uma nova instancia. O nome sera gerado automaticamente (ID do usuario + ID unico).
           </p>
 
           <div className="space-y-1">
@@ -1687,18 +1671,19 @@ export default function IntegrationsPage() {
           </div>
 
           <div className="space-y-1">
-            <label className="text-sm font-medium text-slate-700" htmlFor="evolution-instance-name">
-              Nome da instancia
+            <label className="text-sm font-medium text-slate-700" htmlFor="evolution-webhook-url">
+              Webhook URL
             </label>
             <input
-              id="evolution-instance-name"
+              id="evolution-webhook-url"
               type="text"
-              value={evolutionInstanceNameInput}
-              onChange={(event) => setEvolutionInstanceNameInput(event.target.value)}
-              placeholder="Ex.: WhatsApp atendimento"
+              value={evolutionWebhookUrlInput}
+              onChange={(event) => setEvolutionWebhookUrlInput(event.target.value)}
+              placeholder="https://seu-webhook.exemplo/webhook/endpoint"
               disabled={isEvolutionCreatingInstance}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:bg-gray-100"
             />
+            <p className="text-xs text-gray-500">Informe um webhook valido caso nao utilize um slot.</p>
           </div>
 
           {selectedEvolutionSlot && (
@@ -1725,7 +1710,10 @@ export default function IntegrationsPage() {
             </button>
             <button
               type="submit"
-              disabled={isEvolutionCreatingInstance || !selectedEvolutionSlot}
+              disabled={
+                isEvolutionCreatingInstance ||
+                (!selectedEvolutionSlot && !evolutionWebhookUrlInput.trim())
+              }
               className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-dark disabled:cursor-not-allowed disabled:bg-gray-300"
             >
               {isEvolutionCreatingInstance ? 'Criando instancia...' : 'Criar instancia'}
