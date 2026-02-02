@@ -1565,20 +1565,8 @@ export default function IntegrationsPage() {
             Crie uma nova instancia Evolution. O nome sera gerado automaticamente (ID do usuario + ID unico). Se nao informar um Webhook URL, o sistema usara o webhook interno padrao.
           </p>
 
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-slate-700" htmlFor="evolution-webhook-url">
-              Webhook URL
-            </label>
-            <input
-              id="evolution-webhook-url"
-              type="text"
-              value={evolutionWebhookUrlInput}
-              onChange={(event) => setEvolutionWebhookUrlInput(event.target.value)}
-              placeholder="https://seu-webhook.exemplo/webhook/endpoint"
-              disabled={isEvolutionCreatingInstance}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed disabled:bg-gray-100"
-            />
-            <p className="text-xs text-gray-500">Opcional: informe um webhook personalizado. Caso contrario, o sistema usara o webhook padrao interno.</p>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            Ao confirmar, a instancia sera provisionada com o webhook padrao interno do sistema.
           </div>
 
           {evolutionCreateError && (
