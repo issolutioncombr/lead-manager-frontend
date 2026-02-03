@@ -161,8 +161,8 @@
      return raw;
    };
  
-   return (
-     <div className="flex h-[calc(100vh-100px)] gap-4">
+  return (
+    <div className="flex h-[calc(100vh-100px)] gap-4">
        <aside className="w-80 shrink-0 rounded-lg border bg-white">
          <div className="border-b px-4 py-3">
            <h2 className="text-lg font-semibold">Conversas (Evolution)</h2>
@@ -250,18 +250,18 @@
          </div>
        </aside>
  
-       <section className="flex-1 rounded-lg border bg-white">
-         <div className="border-b px-4 py-3">
-           <h2 className="text-lg font-semibold">{selectedContact ? formatPhone(selectedContact) : 'Selecione uma conversa'}</h2>
-         </div>
-         <div className="flex h-full flex-col">
-           <div ref={messagesContainerRef} className="flex-1 space-y-2 overflow-y-auto p-4">
+      <section className="flex-1 rounded-lg border bg-[#0b141a]">
+        <div className="border-b border-[#202c33] px-4 py-3 text-[#e9edef]">
+          <h2 className="text-lg font-semibold">{selectedContact ? formatPhone(selectedContact) : 'Selecione uma conversa'}</h2>
+        </div>
+        <div className="flex h-full flex-col">
+          <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-6">
              {!selectedContact && <div className="text-sm text-gray-500">Selecione uma conversa para visualizar.</div>}
              {selectedContact && isLoadingMessages && (
                <div className="space-y-2">
                  {Array.from({ length: 6 }).map((_, i) => (
-                   <div key={i} className="flex justify-start">
-                     <div className="h-14 w-64 animate-pulse rounded bg-gray-200" />
+                  <div key={i} className="flex justify-start">
+                    <div className="h-14 w-64 animate-pulse rounded-2xl bg-[#202c33]" />
                    </div>
                  ))}
                </div>
@@ -269,47 +269,49 @@
              {selectedContact && !isLoadingMessages && messages.map((msg) => {
                const isMine = !!msg.fromMe;
                return (
-                 <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'} mt-2`}>
-                   <div className={`max-w-[70%] rounded-lg px-3 py-2 text-sm ${isMine ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-800'}`}>
-                     <div className="flex items-center gap-2 text-[11px] opacity-80">
-                       <span>{isMine ? '↗' : '↙'}</span>
-                       {!isMine && msg.pushName && <span>{msg.pushName}</span>}
-                     </div>
-                     {msg.mediaUrl ? (
-                       <div className="mt-1">
-                         <a href={msg.mediaUrl} target="_blank" rel="noreferrer" className="underline">Anexo</a>
-                         {msg.caption && <div className="mt-1 whitespace-pre-wrap">{msg.caption}</div>}
-                       </div>
-                     ) : (
-                       <p className="mt-1 whitespace-pre-wrap">{msg.conversation ?? `[${msg.messageType ?? 'mensagem'}]`}</p>
-                     )}
-                     <div className={`mt-1 text-[11px] ${isMine ? 'text-white/90' : 'text-gray-500'}`}>
-                       {new Date(msg.timestamp).toLocaleString()}
-                     </div>
-                   </div>
-                 </div>
+                <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'} mb-2`}>
+                  <div
+                    className={[
+                      'max-w-[70%] px-3 py-2 text-sm',
+                      'rounded-2xl',
+                      isMine ? 'bg-[#005c4b] text-white rounded-br-md' : 'bg-[#202c33] text-[#e9edef] rounded-bl-md'
+                    ].join(' ')}
+                  >
+                    {msg.mediaUrl ? (
+                      <div>
+                        <a href={msg.mediaUrl} target="_blank" rel="noreferrer" className="underline">Anexo</a>
+                        {msg.caption && <div className="mt-1 whitespace-pre-wrap">{msg.caption}</div>}
+                      </div>
+                    ) : (
+                      <p className="whitespace-pre-wrap">{msg.conversation ?? `[${msg.messageType ?? 'mensagem'}]`}</p>
+                    )}
+                    <div className={`mt-1 text-[11px] ${isMine ? 'text-white/70' : 'text-[#8696a0]'}`}>
+                      {new Date(msg.timestamp).toLocaleTimeString()}
+                    </div>
+                  </div>
+                </div>
                );
              })}
              {selectedContact && !isLoadingMessages && messages.length === 0 && (
-               <div className="text-sm text-gray-500">Nenhuma mensagem.</div>
+              <div className="text-sm text-[#8696a0]">Nenhuma mensagem.</div>
              )}
            </div>
-           <div className="flex items-center justify-between border-t p-3">
-             <div className="text-xs text-gray-500">{selectedContact ? formatPhone(selectedContact) : '—'}</div>
+          <div className="flex items-center justify-between border-t border-[#202c33] p-3 text-[#e9edef]">
+            <div className="text-xs">{selectedContact ? formatPhone(selectedContact) : '—'}</div>
              <div className="flex items-center gap-2">
-               <select value={directionFilter} onChange={(e) => setDirectionFilter(e.target.value as any)} className="rounded-md border px-2 py-1 text-xs">
+              <select value={directionFilter} onChange={(e) => setDirectionFilter(e.target.value as any)} className="rounded-md border border-[#202c33] bg-[#0b141a] px-2 py-1 text-xs text-[#e9edef]">
                  <option value="all">Todas</option>
                  <option value="inbound">Recebidas</option>
                  <option value="outbound">Enviadas</option>
                </select>
              </div>
            </div>
-           {error && <div className="border-t p-3 text-sm text-red-600">{error}</div>}
+          {error && <div className="border-t border-[#202c33] p-3 text-sm text-red-400">{error}</div>}
          </div>
        </section>
  
-       <aside className="w-96 shrink-0 rounded-lg border bg-white p-4">
-         <h3 className="text-base font-semibold">Enviar</h3>
+      <aside className="w-96 shrink-0 rounded-lg border bg-white p-4">
+        <h3 className="text-base font-semibold">Enviar</h3>
          <div className="mt-2 space-y-2">
            <textarea
              value={text}
