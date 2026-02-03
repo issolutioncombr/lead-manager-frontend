@@ -32,7 +32,8 @@
    const [messages, setMessages] = useState<Message[]>([]);
    const [isLoadingChats, setIsLoadingChats] = useState(false);
    const [isLoadingMessages, setIsLoadingMessages] = useState(false);
-   const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [preferLocal, setPreferLocal] = useState(false);
    const [text, setText] = useState('');
    const [mediaUrl, setMediaUrl] = useState('');
    const [caption, setCaption] = useState('');
@@ -65,11 +66,11 @@
        setError(null);
        const params: Record<string, any> = {};
        if (instanceId) params.instanceId = instanceId;
-      const resp = await api.get<{ data: ChatItem[] }>('/integrations/evolution/messages/chats', { params: { ...params, source: 'provider' } });
+      const resp = await api.get<{ data: ChatItem[] }>('/integrations/evolution/messages/chats', { params: { ...params, source: preferLocal ? 'local' : 'provider' } });
        setChats(resp.data.data);
      } catch (e) {
        const status = (e as any)?.response?.status;
-       setError(`Não foi possível carregar as conversas${status ? ` (código ${status})` : ''}.`);
+      setError(`Não foi possível carregar as conversas${status ? ` (código ${status})` : ''}.`);
      } finally {
        setIsLoadingChats(false);
      }
@@ -96,12 +97,12 @@
        if (directionFilter !== 'all') params.direction = directionFilter;
       const resp = await api.get<{ data: Message[] }>(
          '/integrations/evolution/messages/conversation',
-        { params: { ...params, source: 'provider' } }
+        { params: { ...params, source: preferLocal ? 'local' : 'provider' } }
        );
        setMessages(resp.data.data);
      } catch (e) {
        const status = (e as any)?.response?.status;
-       setError(`Não foi possível carregar a conversa${status ? ` (código ${status})` : ''}.`);
+      setError(`Não foi possível carregar a conversa${status ? ` (código ${status})` : ''}.`);
      } finally {
        setIsLoadingMessages(false);
      }
@@ -317,7 +318,17 @@
                 Enviar
               </button>
             </div>
-            {error && <div className="mt-2 text-sm text-red-400">{error}</div>}
+          {error && (
+            <div className="mt-2 text-sm text-red-400">
+              {error}
+              <button
+                onClick={() => { setPreferLocal(true); setError(null); if (selectedContact) { fetchConversation(selectedContact); } else { loadChats(); } }}
+                className="ml-2 rounded-md border border-[#202c33] bg-[#0b141a] px-2 py-1 text-xs text-[#e9edef]"
+              >
+                Ler fonte local
+              </button>
+            </div>
+          )}
           </div>
          </div>
        </section>
