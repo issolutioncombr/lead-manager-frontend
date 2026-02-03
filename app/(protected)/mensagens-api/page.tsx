@@ -1,6 +1,6 @@
  'use client';
  
- import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
  import { useSearchParams } from 'next/navigation';
  import api from '../../../lib/api';
  
@@ -54,13 +54,20 @@
        try {
          const resp = await api.get('/integrations/evolution/instances/list');
          const list = Array.isArray(resp.data) ? resp.data : [];
-         setInstances(list.map((x: any) => ({ id: x.instanceName ?? x.id ?? x.name ?? 'unknown', name: x.name ?? x.instanceName ?? x.id })));
+        setInstances(
+          list
+            .map((x: any) => ({
+              id: x.instanceId ?? x.id ?? x.instanceName ?? x.name ?? 'unknown',
+              name: x.name ?? x.instanceId ?? x.id ?? null
+            }))
+            .filter((x: any) => typeof x.id === 'string' && x.id.length > 0)
+        );
        } catch {}
      };
      loadInstances();
    }, []);
  
-   const loadChats = async () => {
+  const loadChats = useCallback(async () => {
      try {
        setIsLoadingChats(true);
        setError(null);
@@ -74,11 +81,11 @@
      } finally {
        setIsLoadingChats(false);
      }
-   };
+  }, [instanceId, preferLocal]);
  
    useEffect(() => {
-     loadChats();
-   }, [instanceId]);
+    void loadChats();
+  }, [loadChats]);
  
    const filteredChats = useMemo(() => {
      const q = chatSearch.trim().toLowerCase();
@@ -86,7 +93,7 @@
      return chats.filter((c) => (c.name ?? '').toLowerCase().includes(q) || c.contact.includes(q));
    }, [chats, chatSearch]);
  
-   const fetchConversation = async (contact: string) => {
+  const fetchConversation = useCallback(async (contact: string) => {
      const phone = contact.replace(/\D+/g, '');
      if (!phone || phone.length < 7) return;
      try {
@@ -106,25 +113,29 @@
      } finally {
        setIsLoadingMessages(false);
      }
-   };
+  }, [directionFilter, instanceId, preferLocal]);
+
+  useEffect(() => {
+    if (!selectedContact) return;
+    void fetchConversation(selectedContact);
+  }, [fetchConversation, selectedContact]);
  
    useEffect(() => {
      const phoneParam = searchParams.get('phone');
      const directionParam = searchParams.get('direction');
-     if (phoneParam && typeof phoneParam === 'string') {
-       const n = phoneParam.replace(/\D+/g, '');
-       if (n && n.length >= 7) {
-         setSelectedContact(n);
-         fetchConversation(n);
-       }
-     }
      if (directionParam === 'inbound' || directionParam === 'outbound') {
        setDirectionFilter(directionParam as any);
      }
+    if (phoneParam && typeof phoneParam === 'string') {
+      const n = phoneParam.replace(/\D+/g, '');
+      if (n && n.length >= 7) {
+        setSelectedContact(n);
+      }
+    }
      // eslint-disable-next-line react-hooks/exhaustive-deps
    }, []);
  
-   const sendMessage = async () => {
+  const sendMessage = useCallback(async () => {
      if (!normalizedPhone || (!text && !mediaUrl)) return;
      try {
        setError(null);
@@ -138,21 +149,21 @@
        setText('');
        setCaption('');
        setMediaUrl('');
-       await fetchConversation(normalizedPhone);
+      await fetchConversation(normalizedPhone);
      } catch (e) {
        setError('Falha ao enviar mensagem.');
      }
-   };
+  }, [caption, fetchConversation, instanceId, mediaUrl, normalizedPhone, text]);
  
    useEffect(() => {
-     if (!normalizedPhone) return;
+    if (!selectedContact) return;
      const id = window.setInterval(() => {
-       fetchConversation(normalizedPhone);
+      void fetchConversation(selectedContact);
      }, 5000);
      return () => {
        window.clearInterval(id);
      };
-   }, [normalizedPhone, directionFilter]);
+  }, [fetchConversation, selectedContact]);
  
    const formatPhone = (raw?: string | null) => {
      if (!raw) return '';
@@ -207,7 +218,7 @@
               {filteredChats.map((chat) => (
                 <li key={`${chat.id}-${chat.contact}`}>
                    <button
-                     onClick={() => { setSelectedContact(chat.contact); fetchConversation(chat.contact); }}
+                     onClick={() => { setSelectedContact(chat.contact); }}
                      className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-gray-50"
                    >
                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -240,7 +251,7 @@
                    className="w-full rounded-md border px-3 py-2 text-sm"
                  />
                  <button
-                   onClick={() => { const n = phoneInput.replace(/\D+/g, ''); if (n) { setSelectedContact(n); fetchConversation(n); } }}
+                   onClick={() => { const n = phoneInput.replace(/\D+/g, ''); if (n) { setSelectedContact(n); } }}
                    className="rounded-md border px-3 py-2 text-sm"
                  >
                    Abrir
@@ -322,7 +333,7 @@
             <div className="mt-2 text-sm text-red-400">
               {error}
               <button
-                onClick={() => { setPreferLocal(true); setError(null); if (selectedContact) { fetchConversation(selectedContact); } else { loadChats(); } }}
+                onClick={() => { setPreferLocal(true); setError(null); }}
                 className="ml-2 rounded-md border border-[#202c33] bg-[#0b141a] px-2 py-1 text-xs text-[#e9edef]"
               >
                 Ler fonte local
