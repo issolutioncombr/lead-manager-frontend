@@ -266,8 +266,8 @@
                  ))}
                </div>
              )}
-             {selectedContact && !isLoadingMessages && messages.map((msg) => {
-               const isMine = !!msg.fromMe;
+            {selectedContact && !isLoadingMessages && messages.map((msg) => {
+              const isMine = (msg.direction === 'OUTBOUND') || !!msg.fromMe;
                return (
                 <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'} mb-2`}>
                   <div
