@@ -50,7 +50,7 @@ export default function ConversationsPage() {
         setIsLoadingLeads(true);
         setError(null);
         const resp = await api.get<LeadsResponse>('/leads', {
-          params: { page: 1, limit: 200, search: leadSearch || undefined }
+          params: { page: 1, limit: 100, search: leadSearch || undefined }
         });
         setLeads(resp.data.data);
       } catch (e) {
