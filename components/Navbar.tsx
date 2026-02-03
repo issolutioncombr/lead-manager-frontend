@@ -28,6 +28,8 @@ const links: LinkItem[] = [
   // { href: '/alunos', label: 'Alunos', icon: 'users' },
   { href: '/leads', label: 'Leads', icon: 'funnel' },
   { href: '/conversations', label: 'Conversas', icon: 'users' },
+  { href: '/phone-instances', label: 'Instâncias WhatsApp', icon: 'users' },
+  { href: '/webhooks', label: 'Webhooks', icon: 'puzzle' },
   { href: '/sellers', label: 'Vendedores', icon: 'users' },
   // { href: '/course-leads', label: 'Leads Curso', icon: 'funnel' },
   { href: '/appointments', label: 'Video Chamadas', icon: 'calendar' },

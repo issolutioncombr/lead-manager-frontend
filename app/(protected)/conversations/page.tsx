@@ -1,6 +1,6 @@
 'use client';
 
-import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import api from '../../../lib/api';
 import { Lead } from '../../../types';
@@ -91,15 +91,7 @@ export default function ConversationsPage() {
     return (leadsPage - 1) * leadsLimit + 1;
   }, [leadsPage, leadsLimit, leadsTotal]);
 
-  // Deep link ?leadId=
-  useEffect(() => {
-    const leadId = searchParams.get('leadId');
-    if (!leadId || leads.length === 0) return;
-    const found = leads.find((l) => l.id === leadId);
-    if (found) {
-      openLead(found);
-    }
-  }, [searchParams, leads]);
+  
 
   const handleRetryLeads = () => {
     setError(null);
@@ -144,7 +136,7 @@ export default function ConversationsPage() {
     return Math.min(leadsPage * leadsLimit, leadsTotal);
   }, [leadsPage, leadsLimit, leadsTotal]);
 
-  const openLead = async (lead: Lead) => {
+  const openLead = useCallback(async (lead: Lead) => {
     setSelectedLead(lead);
     setMessagePage(1);
     const reqId = ++latestRequestRef.current;
@@ -167,8 +159,17 @@ export default function ConversationsPage() {
         setIsLoadingMessages(false);
       }
     }
-  };
+  }, [messageLimit, textOnly]);
 
+  // Deep link ?leadId=
+  useEffect(() => {
+    const leadId = searchParams.get('leadId');
+    if (!leadId || leads.length === 0) return;
+    const found = leads.find((l) => l.id === leadId);
+    if (found) {
+      openLead(found);
+    }
+  }, [searchParams, leads, openLead]);
   const loadMessagesPage = async (page: number) => {
     if (!selectedLead) return;
     const reqId = ++latestRequestRef.current;
