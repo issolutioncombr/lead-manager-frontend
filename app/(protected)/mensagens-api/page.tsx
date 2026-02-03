@@ -65,7 +65,12 @@ export default function MensagensApiPage() {
       const resp = await api.get<{ data: ChatItem[] }>('/integrations/evolution/messages/chats', { params });
       setChats(resp.data.data);
     } catch (e) {
-      setError('Não foi possível carregar as conversas.');
+      const status = (e as any)?.response?.status;
+      if (status === 404) {
+        setError('Endpoint não encontrado (404). Verifique NEXT_PUBLIC_API_URL apontando para o backend principal com /api.');
+      } else {
+        setError('Não foi possível carregar as conversas.');
+      }
     } finally {
       setIsLoadingChats(false);
     }
@@ -95,7 +100,12 @@ export default function MensagensApiPage() {
       );
       setMessages(resp.data.data);
     } catch (e) {
-      setError('Não foi possível carregar a conversa.');
+      const status = (e as any)?.response?.status;
+      if (status === 404) {
+        setError('Endpoint de conversa não encontrado (404). Verifique NEXT_PUBLIC_API_URL apontando para o backend principal com /api.');
+      } else {
+        setError('Não foi possível carregar a conversa.');
+      }
     } finally {
       setIsLoadingMessages(false);
     }
