@@ -244,6 +244,25 @@ export default function ConversationsPage() {
     return Math.min(messagePage * messageLimit, messagesTotal);
   }, [messagePage, messageLimit, messagesTotal]);
 
+  const [botButtons, setBotButtons] = useState<Array<{ id: string; name: string; variable: string }>>([]);
+  useEffect(() => {
+    const fetchButtons = async () => {
+      try {
+        const resp = await api.get<Array<{ id: string; name: string; variable: string }>>('/bot-buttons', {
+          params: { active: true }
+        });
+        setBotButtons(resp.data);
+      } catch {}
+    };
+    fetchButtons();
+  }, []);
+  const triggerButton = async (buttonId: string) => {
+    if (!selectedLead) return;
+    try {
+      await api.post(`/bot-buttons/${buttonId}/trigger`, { leadId: selectedLead.id });
+    } catch {}
+  };
+
   return (
     <div className="flex h-[calc(100vh-100px)] gap-4">
       <aside className="w-80 shrink-0 rounded-lg border bg-white">
@@ -390,6 +409,19 @@ export default function ConversationsPage() {
               </button>
             )}
           </div>
+          {selectedLead && botButtons.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {botButtons.map((b) => (
+                <button
+                  key={b.id}
+                  onClick={() => triggerButton(b.id)}
+                  className="rounded-md border px-3 py-2 text-xs hover:bg-gray-50"
+                >
+                  {b.name}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div className="flex h-full flex-col">
           <div ref={messagesContainerRef} className="flex-1 space-y-2 overflow-y-auto p-4">
