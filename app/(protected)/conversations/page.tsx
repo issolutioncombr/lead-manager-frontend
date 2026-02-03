@@ -24,6 +24,9 @@ type LeadsResponse = {
 
 export default function ConversationsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [leadsTotal, setLeadsTotal] = useState(0);
+  const [leadsPage, setLeadsPage] = useState(1);
+  const [leadsLimit, setLeadsLimit] = useState(30);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [messagesTotal, setMessagesTotal] = useState(0);
@@ -50,9 +53,11 @@ export default function ConversationsPage() {
         setIsLoadingLeads(true);
         setError(null);
         const resp = await api.get<LeadsResponse>('/leads', {
-          params: { page: 1, limit: 100, search: leadSearch || undefined }
+          params: { page: leadsPage, limit: leadsLimit, search: leadSearch || undefined }
         });
         setLeads(resp.data.data);
+        setLeadsTotal(resp.data.total);
+        setLeadsPage(resp.data.page);
       } catch (e) {
         setError('Não foi possível carregar os leads.');
       } finally {
@@ -60,7 +65,28 @@ export default function ConversationsPage() {
       }
     };
     fetchLeads();
-  }, [leadSearch]);
+  }, [leadSearch, leadsLimit, leadsPage]);
+
+  const handleLeadsPrev = () => {
+    if (isLoadingLeads || leadsPage <= 1) return;
+    setLeadsPage((p) => Math.max(1, p - 1));
+  };
+
+  const handleLeadsNext = () => {
+    const maxPage = Math.max(1, Math.ceil(leadsTotal / leadsLimit));
+    if (isLoadingLeads || leadsPage >= maxPage) return;
+    setLeadsPage((p) => Math.min(maxPage, p + 1));
+  };
+
+  const leadsFrom = useMemo(() => {
+    if (leadsTotal === 0) return 0;
+    return (leadsPage - 1) * leadsLimit + 1;
+  }, [leadsPage, leadsLimit, leadsTotal]);
+
+  const leadsTo = useMemo(() => {
+    if (leadsTotal === 0) return 0;
+    return Math.min(leadsPage * leadsLimit, leadsTotal);
+  }, [leadsPage, leadsLimit, leadsTotal]);
 
   const openLead = async (lead: Lead) => {
     setSelectedLead(lead);
@@ -150,6 +176,12 @@ export default function ConversationsPage() {
               className="w-full rounded-md border px-3 py-2 text-sm"
             />
           </div>
+          <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
+            <span>Total: {leadsTotal}</span>
+            <span>
+              Mostrando {leadsFrom}–{leadsTo}
+            </span>
+          </div>
         </div>
         <div className="h-full overflow-y-auto">
           {isLoadingLeads ? (
@@ -174,6 +206,25 @@ export default function ConversationsPage() {
               ))}
             </ul>
           )}
+        </div>
+        <div className="flex items-center justify-between border-t px-4 py-3">
+          <div className="text-xs text-gray-500">Página {leadsPage}</div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleLeadsPrev}
+              disabled={isLoadingLeads || leadsPage <= 1}
+              className="rounded-md border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Anterior
+            </button>
+            <button
+              onClick={handleLeadsNext}
+              disabled={isLoadingLeads || leadsTo >= leadsTotal}
+              className="rounded-md border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Próxima
+            </button>
+          </div>
         </div>
       </aside>
 
