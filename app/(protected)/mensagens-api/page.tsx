@@ -76,6 +76,16 @@ export default function MensagensApiPage() {
     }
   };
 
+  useEffect(() => {
+    if (!normalizedPhone) return;
+    const id = window.setInterval(() => {
+      fetchConversation();
+    }, 5000);
+    return () => {
+      window.clearInterval(id);
+    };
+  }, [normalizedPhone, directionFilter]);
+
   const formatPhone = (raw?: string | null) => {
     if (!raw) return '';
     const d = raw.replace(/\D+/g, '');
@@ -97,16 +107,18 @@ export default function MensagensApiPage() {
               onChange={(e) => setPhone(e.target.value)}
               placeholder="Ex.: +5511999998888"
               className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+              aria-label="Telefone"
             />
           </div>
           <div className="flex items-end gap-2">
-            <button onClick={fetchConversation} className="rounded-md border px-3 py-2 text-sm">
+            <button onClick={fetchConversation} className="rounded-md border px-3 py-2 text-sm" aria-label="Carregar conversa">
               Carregar conversa
             </button>
             <select
               value={directionFilter}
               onChange={(e) => setDirectionFilter(e.target.value as any)}
               className="rounded-md border px-2 py-2 text-sm"
+              aria-label="Direção"
             >
               <option value="all">Todas</option>
               <option value="inbound">Recebidas</option>
@@ -182,20 +194,23 @@ export default function MensagensApiPage() {
               onChange={(e) => setText(e.target.value)}
               placeholder="Mensagem de texto"
               className="h-28 w-full rounded-md border px-3 py-2 text-sm"
+              aria-label="Mensagem"
             />
             <input
               value={mediaUrl}
               onChange={(e) => setMediaUrl(e.target.value)}
               placeholder="URL de mídia (opcional)"
               className="w-full rounded-md border px-3 py-2 text-sm"
+              aria-label="URL de mídia"
             />
             <input
               value={caption}
               onChange={(e) => setCaption(e.target.value)}
               placeholder="Legenda (opcional)"
               className="w-full rounded-md border px-3 py-2 text-sm"
+              aria-label="Legenda"
             />
-            <button onClick={sendMessage} className="w-full rounded-md border px-3 py-2 text-sm">
+            <button onClick={sendMessage} className="w-full rounded-md border px-3 py-2 text-sm" aria-label="Enviar">
               Enviar
             </button>
           </div>
