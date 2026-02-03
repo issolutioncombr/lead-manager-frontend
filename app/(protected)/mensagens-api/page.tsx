@@ -94,9 +94,9 @@
        const params: Record<string, any> = { phone };
        if (instanceId) params.instanceId = instanceId;
        if (directionFilter !== 'all') params.direction = directionFilter;
-       const resp = await api.get<{ data: Message[] }>(
+      const resp = await api.get<{ data: Message[] }>(
          '/integrations/evolution/messages/conversation',
-         { params }
+        { params: { ...params, source: 'provider' } }
        );
        setMessages(resp.data.data);
      } catch (e) {
