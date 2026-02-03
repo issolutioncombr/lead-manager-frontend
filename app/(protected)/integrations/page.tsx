@@ -1037,7 +1037,7 @@ export default function IntegrationsPage() {
     if (currentStatus === 'connected' && previousStatus === 'pending') {
       setFeedback({
         type: 'success',
-        message: 'WhatsApp (Evolution) conectado com sucesso.'
+        message: 'WhatsApp (API) conectado com sucesso.'
       });
       stopEvolutionPolling();
       void loadEvolutionStatus();
