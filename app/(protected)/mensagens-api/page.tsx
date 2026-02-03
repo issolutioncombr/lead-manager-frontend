@@ -89,6 +89,7 @@ export default function MensagensApiPage() {
       setIsLoadingMessages(true);
       setError(null);
       const params: Record<string, any> = { phone };
+      if (instanceId) params.instanceId = instanceId;
       if (directionFilter !== 'all') params.direction = directionFilter;
       const resp = await api.get<{ data: Message[] }>(
         '/integrations/evolution/messages/conversation',
@@ -111,7 +112,8 @@ export default function MensagensApiPage() {
         phone: `+${normalizedPhone}`,
         text: text || undefined,
         mediaUrl: mediaUrl || undefined,
-        caption: caption || undefined
+        caption: caption || undefined,
+        instanceId: instanceId || undefined
       });
       setText('');
       setCaption('');
