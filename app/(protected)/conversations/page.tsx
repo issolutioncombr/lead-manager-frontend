@@ -1,6 +1,7 @@
 'use client';
 
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import api from '../../../lib/api';
 import { Lead } from '../../../types';
 
@@ -23,6 +24,7 @@ type LeadsResponse = {
 };
 
 export default function ConversationsPage() {
+  const searchParams = useSearchParams();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [leadsTotal, setLeadsTotal] = useState(0);
   const [leadsPage, setLeadsPage] = useState(1);
@@ -38,6 +40,7 @@ export default function ConversationsPage() {
   const [error, setError] = useState<string | null>(null);
   const latestRequestRef = useRef(0);
   const [leadSearch, setLeadSearch] = useState('');
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
 
   const sortedLeads = useMemo(() => {
     return [...leads].sort((a, b) => {
@@ -53,9 +56,14 @@ export default function ConversationsPage() {
         setIsLoadingLeads(true);
         setError(null);
         const resp = await api.get<LeadsResponse>('/leads', {
-          params: { page: leadsPage, limit: leadsLimit, search: leadSearch || undefined }
+          params: {
+            page: leadsPage,
+            limit: leadsLimit,
+            search: leadSearch || undefined,
+            includeLastMessage: true
+          }
         });
-        setLeads(resp.data.data);
+        setLeads(resp.data.data as any);
         setLeadsTotal(resp.data.total);
         setLeadsPage(resp.data.page);
       } catch (e) {
@@ -82,6 +90,54 @@ export default function ConversationsPage() {
     if (leadsTotal === 0) return 0;
     return (leadsPage - 1) * leadsLimit + 1;
   }, [leadsPage, leadsLimit, leadsTotal]);
+
+  // Deep link ?leadId=
+  useEffect(() => {
+    const leadId = searchParams.get('leadId');
+    if (!leadId || leads.length === 0) return;
+    const found = leads.find((l) => l.id === leadId);
+    if (found) {
+      openLead(found);
+    }
+  }, [searchParams, leads]);
+
+  const handleRetryLeads = () => {
+    setError(null);
+    setIsLoadingLeads(true);
+    setLeadsPage((p) => p);
+  };
+
+  const handleRetryMessages = () => {
+    setError(null);
+    if (selectedLead) {
+      loadMessagesPage(messagePage);
+    }
+  };
+
+  const formatPhone = (raw?: string | null) => {
+    if (!raw) return '';
+    const d = raw.replace(/\D+/g, '');
+    if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+    if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+    return raw;
+  };
+
+  const dateLabel = (iso: string) => {
+    const dt = new Date(iso);
+    const now = new Date();
+    const y = new Date(now);
+    y.setDate(now.getDate() - 1);
+    if (dt.toDateString() === now.toDateString()) return 'Hoje';
+    if (dt.toDateString() === y.toDateString()) return 'Ontem';
+    return dt.toLocaleDateString();
+  };
+
+  useEffect(() => {
+    if (messagesContainerRef.current) {
+      const el = messagesContainerRef.current;
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [messages, selectedLead]);
 
   const leadsTo = useMemo(() => {
     if (leadsTotal === 0) return 0;
@@ -152,6 +208,30 @@ export default function ConversationsPage() {
     const digits = value.replace(/\D+/g, '');
     setLeadSearch(digits);
   };
+  const [orderMode, setOrderMode] = useState<'alpha' | 'recent' | 'active'>('alpha');
+  const orderedLeads = useMemo(() => {
+    if (orderMode === 'alpha') return sortedLeads;
+    const copy = [...leads] as any[];
+    if (orderMode === 'recent') {
+      copy.sort((a: any, b: any) => {
+        const at = a.lastMessage?.timestamp ?? a.updatedAt ?? a.createdAt;
+        const bt = b.lastMessage?.timestamp ?? b.updatedAt ?? b.createdAt;
+        return new Date(bt).getTime() - new Date(at).getTime();
+      });
+      return copy;
+    }
+    // active: com última mensagem primeiro; sem mensagem por último; dentro de cada grupo, ordenar por recência
+    copy.sort((a: any, b: any) => {
+      const ahas = !!a.lastMessage?.timestamp;
+      const bhas = !!b.lastMessage?.timestamp;
+      if (ahas && !bhas) return -1;
+      if (!ahas && bhas) return 1;
+      const at = a.lastMessage?.timestamp ?? a.updatedAt ?? a.createdAt;
+      const bt = b.lastMessage?.timestamp ?? b.updatedAt ?? b.createdAt;
+      return new Date(bt).getTime() - new Date(at).getTime();
+    });
+    return copy;
+  }, [orderMode, sortedLeads, leads]);
 
   const messagesFrom = useMemo(() => {
     if (messagesTotal === 0) return 0;
@@ -176,6 +256,39 @@ export default function ConversationsPage() {
               className="w-full rounded-md border px-3 py-2 text-sm"
             />
           </div>
+          <div className="mt-2 flex items-center gap-2">
+            <span className="text-xs text-gray-500">Ordenação:</span>
+            <button
+              onClick={() => setOrderMode('alpha')}
+              className={`rounded-md px-2 py-1 text-xs ${orderMode === 'alpha' ? 'bg-primary/10 text-primary' : 'border'}`}
+            >
+              A–Z
+            </button>
+            <button
+              onClick={() => setOrderMode('recent')}
+              className={`rounded-md px-2 py-1 text-xs ${orderMode === 'recent' ? 'bg-primary/10 text-primary' : 'border'}`}
+            >
+              Recentes
+            </button>
+            <button
+              onClick={() => setOrderMode('active')}
+              className={`rounded-md px-2 py-1 text-xs ${orderMode === 'active' ? 'bg-primary/10 text-primary' : 'border'}`}
+            >
+              Ativos
+            </button>
+            <span className="ml-auto text-xs text-gray-500">Itens/página:</span>
+            <select
+              value={leadsLimit}
+              onChange={(e) => setLeadsLimit(Math.max(10, Math.min(100, parseInt(e.target.value, 10) || 30)))}
+              className="rounded-md border px-2 py-1 text-xs"
+            >
+              {[10, 20, 30, 50, 100].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
             <span>Total: {leadsTotal}</span>
             <span>
@@ -185,10 +298,19 @@ export default function ConversationsPage() {
         </div>
         <div className="h-full overflow-y-auto">
           {isLoadingLeads ? (
-            <div className="p-4 text-sm text-gray-500">Carregando leads...</div>
+            <div className="p-4">
+              <div className="space-y-2">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <div className="h-8 w-8 animate-pulse rounded-full bg-gray-200" />
+                    <div className="h-3 w-40 animate-pulse rounded bg-gray-200" />
+                  </div>
+                ))}
+              </div>
+            </div>
           ) : (
             <ul className="divide-y">
-              {sortedLeads.map((lead) => (
+              {orderedLeads.map((lead: any) => (
                 <li key={lead.id}>
                   <button
                     onClick={() => openLead(lead)}
@@ -200,11 +322,26 @@ export default function ConversationsPage() {
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold">{lead.name ?? 'Sem nome'}</p>
                       <p className="truncate text-xs text-gray-500">{lead.contact ?? 'Sem contato'}</p>
+                      {lead.lastMessage && (
+                        <p className="truncate text-xs text-gray-400">
+                          <span>{lead.lastMessage.fromMe ? '↗' : '↙'}</span>{' '}
+                          {lead.lastMessage.text ?? `[${lead.lastMessage.messageType ?? 'mensagem'}]`} •{' '}
+                          {new Date(lead.lastMessage.timestamp).toLocaleString()}
+                        </p>
+                      )}
                     </div>
                   </button>
                 </li>
               ))}
             </ul>
+          )}
+          {error && !isLoadingLeads && (
+            <div className="p-3 text-xs text-red-600">
+              {error}{' '}
+              <button onClick={handleRetryLeads} className="underline">
+                Tentar novamente
+              </button>
+            </div>
           )}
         </div>
         <div className="flex items-center justify-between border-t px-4 py-3">
@@ -234,7 +371,7 @@ export default function ConversationsPage() {
             {selectedLead ? selectedLead.name ?? selectedLead.contact ?? 'Lead' : 'Nenhum lead selecionado'}
           </h2>
           <p className="text-xs text-gray-500">
-            {selectedLead ? selectedLead.contact ?? '' : 'Clique em um lead para abrir a conversa'}
+            {selectedLead ? formatPhone(selectedLead.contact ?? '') : 'Clique em um lead para abrir a conversa'}
           </p>
           <div className="mt-2 flex items-center gap-3">
             <label className="flex items-center gap-2 text-sm">
@@ -246,26 +383,59 @@ export default function ConversationsPage() {
                 Mostrando {messagesFrom}–{messagesTo} de {messagesTotal}
               </div>
             )}
+            {error && !isLoadingMessages && selectedLead && (
+              <button onClick={handleRetryMessages} className="text-xs underline">
+                Tentar novamente
+              </button>
+            )}
           </div>
         </div>
         <div className="flex h-full flex-col">
-          <div className="flex-1 space-y-4 overflow-y-auto p-4">
+          <div ref={messagesContainerRef} className="flex-1 space-y-2 overflow-y-auto p-4">
             {!selectedLead && <div className="text-sm text-gray-500">Selecione um lead para visualizar a conversa.</div>}
-            {selectedLead && isLoadingMessages && <div className="text-sm text-gray-500">Carregando conversa...</div>}
+            {selectedLead && isLoadingMessages && (
+              <div className="space-y-2">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="flex justify-start">
+                    <div className="h-14 w-64 animate-pulse rounded bg-gray-200" />
+                  </div>
+                ))}
+              </div>
+            )}
             {selectedLead &&
               !isLoadingMessages &&
-              messages.map((msg) => {
+              messages.map((msg, idx) => {
                 const isMine = !!msg.fromMe;
+                const prev = messages[idx - 1];
+                const showDateSeparator =
+                  idx === 0 ||
+                  new Date(msg.timestamp).toDateString() !== new Date(prev?.timestamp ?? '').toDateString();
+                const compactWithPrev = prev && prev.fromMe === msg.fromMe;
                 return (
-                  <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
-                    <div
-                      className={`max-w-[70%] rounded-lg px-3 py-2 text-sm ${
-                        isMine ? 'bg-primary text-white' : 'bg-gray-100 text-gray-800'
-                      }`}
-                    >
-                      <p className="whitespace-pre-wrap">{msg.conversation ?? `[${msg.messageType ?? 'mensagem'}]`}</p>
-                      <div className={`mt-1 text-[11px] ${isMine ? 'text-white/90' : 'text-gray-500'}`}>
-                        {new Date(msg.timestamp).toLocaleString()}
+                  <div key={msg.id}>
+                    {showDateSeparator && (
+                      <div className="mb-2 mt-2 flex justify-center">
+                        <span className="rounded bg-gray-200 px-2 py-1 text-[11px] text-gray-600">
+                          {dateLabel(msg.timestamp)}
+                        </span>
+                      </div>
+                    )}
+                    <div className={`flex ${isMine ? 'justify-end' : 'justify-start'} ${compactWithPrev ? 'mt-1' : 'mt-3'}`}>
+                      <div
+                        className={`max-w-[70%] rounded-lg px-3 py-2 text-sm ${
+                          isMine ? 'bg-primary text-white' : 'bg-gray-100 text-gray-800'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 text-[11px] opacity-80">
+                          <span>{isMine ? '↗' : '↙'}</span>
+                          {msg.pushName && !isMine && <span>{msg.pushName}</span>}
+                        </div>
+                        <p className="mt-1 whitespace-pre-wrap">
+                          {msg.conversation ?? `[${msg.messageType ?? 'mensagem'}]`}
+                        </p>
+                        <div className={`mt-1 text-[11px] ${isMine ? 'text-white/90' : 'text-gray-500'}`}>
+                          {new Date(msg.timestamp).toLocaleString()}
+                        </div>
                       </div>
                     </div>
                   </div>

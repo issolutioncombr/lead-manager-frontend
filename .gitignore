@@ -5,3 +5,5 @@ dist
 build
 .next
 .env.local
+.md*
+docs/conversations-checklist.md
