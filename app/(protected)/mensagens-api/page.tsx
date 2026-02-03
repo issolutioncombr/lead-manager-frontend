@@ -65,7 +65,7 @@
        setError(null);
        const params: Record<string, any> = {};
        if (instanceId) params.instanceId = instanceId;
-       const resp = await api.get<{ data: ChatItem[] }>('/integrations/evolution/messages/chats', { params });
+      const resp = await api.get<{ data: ChatItem[] }>('/integrations/evolution/messages/chats', { params: { ...params, source: 'provider' } });
        setChats(resp.data.data);
      } catch (e) {
        const status = (e as any)?.response?.status;
@@ -203,8 +203,8 @@
              </div>
            ) : (
              <ul className="divide-y">
-               {filteredChats.map((chat) => (
-                 <li key={chat.id}>
+              {filteredChats.map((chat) => (
+                <li key={`${chat.id}-${chat.contact}`}>
                    <button
                      onClick={() => { setSelectedContact(chat.contact); fetchConversation(chat.contact); }}
                      className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-gray-50"
@@ -322,23 +322,7 @@
          </div>
        </section>
  
-      <aside className="w-96 shrink-0 rounded-lg border bg-white p-4">
-        <h3 className="text-base font-semibold">Abrir conversa por número</h3>
-        <div className="mt-2 space-y-2">
-          <input
-            value={phoneInput}
-            onChange={(e) => setPhoneInput(e.target.value)}
-            placeholder="Ex.: 5511999999999"
-            className="w-full rounded-md border px-3 py-2 text-sm"
-          />
-          <button
-            onClick={() => { const n = phoneInput.replace(/\D+/g, ''); if (n) { setSelectedContact(n); fetchConversation(n); } }}
-            className="w-full rounded-md border px-3 py-2 text-sm"
-          >
-            Abrir
-          </button>
-        </div>
-      </aside>
+      
      </div>
    );
  }
