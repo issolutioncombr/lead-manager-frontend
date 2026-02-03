@@ -28,14 +28,14 @@ const links: LinkItem[] = [
   // { href: '/alunos', label: 'Alunos', icon: 'users' },
   { href: '/leads', label: 'Leads', icon: 'funnel' },
   { href: '/conversations', label: 'Conversas', icon: 'users' },
-  { href: '/bot-buttons', label: 'Botões', icon: 'sparkles' },
-  { href: '/webhooks', label: 'Webhooks', icon: 'puzzle' },
+  { href: '/bot-controls', label: 'Botões e Webhooks', icon: 'sparkles' },
   { href: '/sellers', label: 'Vendedores', icon: 'users' },
   // { href: '/course-leads', label: 'Leads Curso', icon: 'funnel' },
   { href: '/appointments', label: 'Video Chamadas', icon: 'calendar' },
   // { href: '/campaigns', label: 'Campanhas', icon: 'megaphone' },
   { href: '/integrations', label: 'Integrações', icon: 'puzzle' },
   { href: '/agent-prompt', label: 'Prompt do agente', icon: 'sparkles' },
+  { href: '/bot-actions', label: 'Acionar Botões', icon: 'clock' },
   { href: '/reports', label: 'Relatórios', icon: 'chart' }
 ];
 
