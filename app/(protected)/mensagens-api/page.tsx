@@ -34,20 +34,25 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
    const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preferLocal, setPreferLocal] = useState(false);
+  const [conversationLimit, setConversationLimit] = useState<number>(50);
+  const [hasNewMessages, setHasNewMessages] = useState(false);
    const [text, setText] = useState('');
    const [mediaUrl, setMediaUrl] = useState('');
    const [caption, setCaption] = useState('');
    const [directionFilter, setDirectionFilter] = useState<'all' | 'inbound' | 'outbound'>('all');
    const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const isAtBottomRef = useRef(true);
+  const scrollToBottomNextRef = useRef(false);
+  const lastMessageIdRef = useRef<string | null>(null);
+  const conversationLimitRef = useRef<number>(50);
  
    const normalizedPhone = useMemo(() => (selectedContact ?? '').replace(/\D+/g, ''), [selectedContact]);
  
-   useEffect(() => {
-     if (messagesContainerRef.current) {
-       const el = messagesContainerRef.current;
-       el.scrollTop = el.scrollHeight;
-     }
-   }, [messages]);
+  const scrollToBottom = useCallback(() => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, []);
  
    useEffect(() => {
      const loadInstances = async () => {
@@ -93,32 +98,67 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
      return chats.filter((c) => (c.name ?? '').toLowerCase().includes(q) || c.contact.includes(q));
    }, [chats, chatSearch]);
  
-  const fetchConversation = useCallback(async (contact: string) => {
+  const getConversation = useCallback(async (contact: string, limit: number) => {
      const phone = contact.replace(/\D+/g, '');
      if (!phone || phone.length < 7) return;
      try {
-       setIsLoadingMessages(true);
-       setError(null);
        const params: Record<string, any> = { phone };
        if (instanceId) params.instanceId = instanceId;
        if (directionFilter !== 'all') params.direction = directionFilter;
+      params.limit = limit;
       const resp = await api.get<{ data: Message[] }>(
          '/integrations/evolution/messages/conversation',
         { params: { ...params, source: preferLocal ? 'local' : 'provider' } }
        );
-       setMessages(resp.data.data);
+      return resp.data.data;
      } catch (e) {
        const status = (e as any)?.response?.status;
       setError(`Não foi possível carregar a conversa${status ? ` (código ${status})` : ''}.`);
      } finally {
-       setIsLoadingMessages(false);
      }
   }, [directionFilter, instanceId, preferLocal]);
 
+  const applyConversation = useCallback(async (contact: string, limit: number, opts?: { preserveScroll?: boolean }) => {
+    const el = messagesContainerRef.current;
+    const prevScrollHeight = opts?.preserveScroll ? (el?.scrollHeight ?? 0) : 0;
+    const prevScrollTop = opts?.preserveScroll ? (el?.scrollTop ?? 0) : 0;
+
+    setIsLoadingMessages(true);
+    setError(null);
+    const data = await getConversation(contact, limit);
+    if (!Array.isArray(data)) {
+      setIsLoadingMessages(false);
+      return;
+    }
+    setMessages(data);
+    lastMessageIdRef.current = data.length ? (data[data.length - 1]?.id ?? null) : null;
+    setHasNewMessages(false);
+
+    requestAnimationFrame(() => {
+      const target = messagesContainerRef.current;
+      if (!target) return;
+      if (scrollToBottomNextRef.current || isAtBottomRef.current) {
+        scrollToBottomNextRef.current = false;
+        scrollToBottom();
+        return;
+      }
+      if (opts?.preserveScroll) {
+        const newScrollHeight = target.scrollHeight;
+        target.scrollTop = prevScrollTop + (newScrollHeight - prevScrollHeight);
+      }
+    });
+
+    setIsLoadingMessages(false);
+  }, [getConversation, scrollToBottom]);
+
+  useEffect(() => {
+    conversationLimitRef.current = conversationLimit;
+  }, [conversationLimit]);
+
   useEffect(() => {
     if (!selectedContact) return;
-    void fetchConversation(selectedContact);
-  }, [fetchConversation, selectedContact]);
+    void applyConversation(selectedContact, conversationLimitRef.current);
+  }, [applyConversation, selectedContact]);
  
    useEffect(() => {
      const phoneParam = searchParams.get('phone');
@@ -139,6 +179,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
      if (!normalizedPhone || (!text && !mediaUrl)) return;
      try {
        setError(null);
+      scrollToBottomNextRef.current = true;
        await api.post('/integrations/evolution/messages/send', {
          phone: `+${normalizedPhone}`,
          text: text || undefined,
@@ -149,21 +190,48 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
        setText('');
        setCaption('');
        setMediaUrl('');
-      await fetchConversation(normalizedPhone);
+      await applyConversation(normalizedPhone, conversationLimit);
      } catch (e) {
        setError('Falha ao enviar mensagem.');
      }
-  }, [caption, fetchConversation, instanceId, mediaUrl, normalizedPhone, text]);
+  }, [applyConversation, caption, conversationLimit, instanceId, mediaUrl, normalizedPhone, text]);
  
    useEffect(() => {
     if (!selectedContact) return;
      const id = window.setInterval(() => {
-      void fetchConversation(selectedContact);
+      if (isAtBottomRef.current) {
+        void applyConversation(selectedContact, conversationLimit);
+      } else {
+        void (async () => {
+          const data = await getConversation(selectedContact, 10);
+          if (!Array.isArray(data) || !data.length) return;
+          const lastId = data[data.length - 1]?.id ?? null;
+          if (lastId && lastId !== lastMessageIdRef.current) {
+            setHasNewMessages(true);
+          }
+        })();
+      }
      }, 5000);
      return () => {
        window.clearInterval(id);
      };
-  }, [fetchConversation, selectedContact]);
+  }, [applyConversation, conversationLimit, getConversation, selectedContact]);
+
+  const handleMessagesScroll = useCallback(() => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    isAtBottomRef.current = distanceFromBottom < 80;
+
+    if (el.scrollTop < 60 && !isLoadingMessages && conversationLimit < 200 && selectedContact) {
+      const next = Math.min(200, conversationLimit + 50);
+      if (next !== conversationLimit) {
+        setConversationLimit(next);
+        void applyConversation(selectedContact, next, { preserveScroll: true });
+      }
+    }
+  }, [applyConversation, conversationLimit, isLoadingMessages, selectedContact]);
  
    const formatPhone = (raw?: string | null) => {
      if (!raw) return '';
@@ -218,7 +286,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
               {filteredChats.map((chat) => (
                 <li key={`${chat.id}-${chat.contact}`}>
                    <button
-                     onClick={() => { setSelectedContact(chat.contact); }}
+                     onClick={() => {
+                       setSelectedContact(chat.contact);
+                       setMessages([]);
+                       setConversationLimit(50);
+                       setHasNewMessages(false);
+                       lastMessageIdRef.current = null;
+                     }}
                      className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-gray-50"
                    >
                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -251,7 +325,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
                    className="w-full rounded-md border px-3 py-2 text-sm"
                  />
                  <button
-                   onClick={() => { const n = phoneInput.replace(/\D+/g, ''); if (n) { setSelectedContact(n); } }}
+                   onClick={() => {
+                     const n = phoneInput.replace(/\D+/g, '');
+                     if (n) {
+                       setSelectedContact(n);
+                       setMessages([]);
+                       setConversationLimit(50);
+                       setHasNewMessages(false);
+                       lastMessageIdRef.current = null;
+                     }
+                   }}
                    className="rounded-md border px-3 py-2 text-sm"
                  >
                    Abrir
@@ -267,7 +350,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
           <h2 className="text-lg font-semibold">{selectedContact ? formatPhone(selectedContact) : 'Selecione uma conversa'}</h2>
         </div>
         <div className="flex h-full flex-col">
-          <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-6">
+          <div ref={messagesContainerRef} onScroll={handleMessagesScroll} className="flex-1 overflow-y-auto p-6">
              {!selectedContact && <div className="text-sm text-gray-500">Selecione uma conversa para visualizar.</div>}
              {selectedContact && isLoadingMessages && (
                <div className="space-y-2">
@@ -311,11 +394,26 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
           <div className="border-t border-[#202c33] p-3 text-[#e9edef]">
             <div className="mb-2 flex items-center gap-2">
               <span className="text-xs text-[#8696a0]">{selectedContact ? formatPhone(selectedContact) : '—'}</span>
-              <select value={directionFilter} onChange={(e) => setDirectionFilter(e.target.value as any)} className="ml-auto rounded-md border border-[#202c33] bg-[#0b141a] px-2 py-1 text-xs text-[#e9edef]">
-                <option value="all">Todas</option>
-                <option value="inbound">Recebidas</option>
-                <option value="outbound">Enviadas</option>
-              </select>
+              <div className="ml-auto flex items-center gap-2">
+                {hasNewMessages && (
+                  <button
+                    onClick={() => {
+                      if (selectedContact) {
+                        scrollToBottomNextRef.current = true;
+                        void applyConversation(selectedContact, conversationLimit);
+                      }
+                    }}
+                    className="rounded-md border border-[#202c33] bg-[#0b141a] px-2 py-1 text-xs text-[#e9edef]"
+                  >
+                    Novas mensagens
+                  </button>
+                )}
+                <select value={directionFilter} onChange={(e) => setDirectionFilter(e.target.value as any)} className="rounded-md border border-[#202c33] bg-[#0b141a] px-2 py-1 text-xs text-[#e9edef]">
+                  <option value="all">Todas</option>
+                  <option value="inbound">Recebidas</option>
+                  <option value="outbound">Enviadas</option>
+                </select>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <input
