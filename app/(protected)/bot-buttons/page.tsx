@@ -10,6 +10,7 @@ type BotButton = {
   url: string;
   active: boolean;
 };
+type WebhookConfig = { id: string; url: string; origin: string; active: boolean };
 
 const DEFAULTS: Array<Pick<BotButton, 'name' | 'variable'>> = [
   { name: 'Travar Bot', variable: 'TRAVAR' },
@@ -20,6 +21,7 @@ const DEFAULTS: Array<Pick<BotButton, 'name' | 'variable'>> = [
 
 export default function BotButtonsPage() {
   const [items, setItems] = useState<BotButton[]>([]);
+  const [configs, setConfigs] = useState<WebhookConfig[]>([]);
   const [activeOnly, setActiveOnly] = useState(true);
   const [form, setForm] = useState<BotButton | null>(null);
   const [loading, setLoading] = useState(false);
@@ -29,8 +31,13 @@ export default function BotButtonsPage() {
     try {
       setLoading(true);
       setError(null);
-      const resp = await api.get<BotButton[]>('/bot-buttons', { params: { active: activeOnly } });
-      setItems(resp.data);
+      const [btnResp, cfgBotResp, cfgManResp] = await Promise.all([
+        api.get<BotButton[]>('/bot-buttons', { params: { active: activeOnly } }),
+        api.get<WebhookConfig[]>('/webhook-configs', { params: { origin: 'bot-control' } }),
+        api.get<WebhookConfig[]>('/webhook-configs', { params: { origin: 'manual' } })
+      ]);
+      setItems(btnResp.data);
+      setConfigs([...cfgBotResp.data, ...cfgManResp.data].filter((c) => c.active));
     } catch {
       setError('Falha ao carregar botões');
     } finally {
@@ -181,6 +188,26 @@ export default function BotButtonsPage() {
               />
             </div>
           </div>
+              <div>
+                <label className="text-xs text-gray-500">Usar webhook existente</label>
+                <select
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v) {
+                      const found = configs.find((c) => c.id === v);
+                      if (found) setForm({ ...form, url: found.url });
+                    }
+                  }}
+                  className="mt-1 w-full rounded-md border px-2 py-2 text-sm"
+                >
+                  <option value="">— selecione (opcional) —</option>
+                  {configs.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.url} ({c.origin})
+                    </option>
+                  ))}
+                </select>
+              </div>
           <div>
             <label className="text-xs text-gray-500">URL do Webhook (N8N)</label>
             <input

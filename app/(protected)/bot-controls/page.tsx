@@ -225,6 +225,26 @@ export default function BotControlsPage() {
                 </div>
               </div>
               <div>
+                <label className="text-xs text-gray-500">Usar webhook existente</label>
+                <select
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v) {
+                      const found = configs.find((c) => c.id === v);
+                      if (found) setBtnForm({ ...btnForm, url: found.url });
+                    }
+                  }}
+                  className="mt-1 w-full rounded-md border px-2 py-2 text-sm"
+                >
+                  <option value="">— selecione (opcional) —</option>
+                  {configs.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.url}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <label className="text-xs text-gray-500">URL do Webhook (N8N)</label>
                 <input
                   value={btnForm.url}
