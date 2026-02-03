@@ -28,6 +28,7 @@ const links: LinkItem[] = [
   // { href: '/alunos', label: 'Alunos', icon: 'users' },
   { href: '/leads', label: 'Leads', icon: 'funnel' },
   { href: '/conversations', label: 'Conversas', icon: 'users' },
+  { href: '/mensagens-api', label: 'Mensagens API', icon: 'users' },
   { href: '/bot-controls', label: 'Botões e Webhooks', icon: 'sparkles' },
   { href: '/sellers', label: 'Vendedores', icon: 'users' },
   // { href: '/course-leads', label: 'Leads Curso', icon: 'funnel' },
