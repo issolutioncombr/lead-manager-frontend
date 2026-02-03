@@ -66,11 +66,7 @@ export default function MensagensApiPage() {
       setChats(resp.data.data);
     } catch (e) {
       const status = (e as any)?.response?.status;
-      if (status === 404) {
-        setError('Endpoint não encontrado (404). Verifique NEXT_PUBLIC_API_URL apontando para o backend principal com /api.');
-      } else {
-        setError('Não foi possível carregar as conversas.');
-      }
+      setError(`Não foi possível carregar as conversas${status ? ` (código ${status})` : ''}.`);
     } finally {
       setIsLoadingChats(false);
     }
@@ -101,11 +97,7 @@ export default function MensagensApiPage() {
       setMessages(resp.data.data);
     } catch (e) {
       const status = (e as any)?.response?.status;
-      if (status === 404) {
-        setError('Endpoint de conversa não encontrado (404). Verifique NEXT_PUBLIC_API_URL apontando para o backend principal com /api.');
-      } else {
-        setError('Não foi possível carregar a conversa.');
-      }
+      setError(`Não foi possível carregar a conversa${status ? ` (código ${status})` : ''}.`);
     } finally {
       setIsLoadingMessages(false);
     }
