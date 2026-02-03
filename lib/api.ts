@@ -2,8 +2,12 @@ import axios from 'axios';
 
 import { clearStoredAuth, getStoredAuth } from './auth-storage';
 
+const rawBase = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
+const trimmed = (rawBase || '').replace(/\/+$/, '');
+const baseURL = trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
+
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api'
+  baseURL
 });
 
 api.interceptors.request.use((config) => {
