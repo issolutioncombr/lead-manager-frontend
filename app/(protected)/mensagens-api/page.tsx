@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import api from '../../../lib/api';
 
 type Message = {
@@ -21,10 +22,12 @@ type Message = {
 type ChatItem = { id: string; name: string | null; contact: string; lastMessage?: { text: string; timestamp: string; fromMe: boolean } | null };
 
 export default function MensagensApiPage() {
+  const searchParams = useSearchParams();
   const [instanceId, setInstanceId] = useState<string>('');
   const [instances, setInstances] = useState<Array<{ id: string; name?: string | null }>>([]);
   const [chats, setChats] = useState<ChatItem[]>([]);
   const [chatSearch, setChatSearch] = useState('');
+  const [phoneInput, setPhoneInput] = useState('');
   const [selectedContact, setSelectedContact] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoadingChats, setIsLoadingChats] = useState(false);
@@ -103,6 +106,22 @@ export default function MensagensApiPage() {
       setIsLoadingMessages(false);
     }
   };
+
+  useEffect(() => {
+    const phoneParam = searchParams.get('phone');
+    const directionParam = searchParams.get('direction');
+    if (phoneParam && typeof phoneParam === 'string') {
+      const n = phoneParam.replace(/\D+/g, '');
+      if (n && n.length >= 7) {
+        setSelectedContact(n);
+        fetchConversation(n);
+      }
+    }
+    if (directionParam === 'inbound' || directionParam === 'outbound') {
+      setDirectionFilter(directionParam as any);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const sendMessage = async () => {
     if (!normalizedPhone || (!text && !mediaUrl)) return;
@@ -209,6 +228,25 @@ export default function MensagensApiPage() {
               ))}
             </ul>
           )}
+          <div className="border-t p-3">
+            <div className="space-y-2">
+              <label className="block text-xs text-gray-500">Abrir conversa por número</label>
+              <div className="flex gap-2">
+                <input
+                  value={phoneInput}
+                  onChange={(e) => setPhoneInput(e.target.value)}
+                  placeholder="Ex.: 5511999999999"
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                />
+                <button
+                  onClick={() => { const n = phoneInput.replace(/\\D+/g, ''); if (n) { setSelectedContact(n); fetchConversation(n); } }}
+                  className="rounded-md border px-3 py-2 text-sm"
+                >
+                  Abrir
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </aside>
 
