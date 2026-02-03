@@ -296,49 +296,49 @@
               <div className="text-sm text-[#8696a0]">Nenhuma mensagem.</div>
              )}
            </div>
-          <div className="flex items-center justify-between border-t border-[#202c33] p-3 text-[#e9edef]">
-            <div className="text-xs">{selectedContact ? formatPhone(selectedContact) : '—'}</div>
-             <div className="flex items-center gap-2">
-              <select value={directionFilter} onChange={(e) => setDirectionFilter(e.target.value as any)} className="rounded-md border border-[#202c33] bg-[#0b141a] px-2 py-1 text-xs text-[#e9edef]">
-                 <option value="all">Todas</option>
-                 <option value="inbound">Recebidas</option>
-                 <option value="outbound">Enviadas</option>
-               </select>
-             </div>
-           </div>
-          {error && <div className="border-t border-[#202c33] p-3 text-sm text-red-400">{error}</div>}
+          <div className="border-t border-[#202c33] p-3 text-[#e9edef]">
+            <div className="mb-2 flex items-center gap-2">
+              <span className="text-xs text-[#8696a0]">{selectedContact ? formatPhone(selectedContact) : '—'}</span>
+              <select value={directionFilter} onChange={(e) => setDirectionFilter(e.target.value as any)} className="ml-auto rounded-md border border-[#202c33] bg-[#0b141a] px-2 py-1 text-xs text-[#e9edef]">
+                <option value="all">Todas</option>
+                <option value="inbound">Recebidas</option>
+                <option value="outbound">Enviadas</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder="Digite uma mensagem"
+                className="flex-1 rounded-2xl border border-[#202c33] bg-[#202c33] px-4 py-2 text-sm text-[#e9edef] placeholder-[#8696a0] focus:outline-none"
+                aria-label="Mensagem"
+              />
+              <button onClick={sendMessage} className="rounded-full bg-[#22c55e] px-4 py-2 text-sm font-semibold text-white" aria-label="Enviar">
+                Enviar
+              </button>
+            </div>
+            {error && <div className="mt-2 text-sm text-red-400">{error}</div>}
+          </div>
          </div>
        </section>
  
       <aside className="w-96 shrink-0 rounded-lg border bg-white p-4">
-        <h3 className="text-base font-semibold">Enviar</h3>
-         <div className="mt-2 space-y-2">
-           <textarea
-             value={text}
-             onChange={(e) => setText(e.target.value)}
-             placeholder="Mensagem de texto"
-             className="h-28 w-full rounded-md border px-3 py-2 text-sm"
-             aria-label="Mensagem"
-           />
-           <input
-             value={mediaUrl}
-             onChange={(e) => setMediaUrl(e.target.value)}
-             placeholder="URL de mídia (opcional)"
-             className="w-full rounded-md border px-3 py-2 text-sm"
-             aria-label="URL de mídia"
-           />
-           <input
-             value={caption}
-             onChange={(e) => setCaption(e.target.value)}
-             placeholder="Legenda (opcional)"
-             className="w-full rounded-md border px-3 py-2 text-sm"
-             aria-label="Legenda"
-           />
-           <button onClick={sendMessage} className="w-full rounded-md border px-3 py-2 text-sm" aria-label="Enviar">
-             Enviar
-           </button>
-         </div>
-       </aside>
+        <h3 className="text-base font-semibold">Abrir conversa por número</h3>
+        <div className="mt-2 space-y-2">
+          <input
+            value={phoneInput}
+            onChange={(e) => setPhoneInput(e.target.value)}
+            placeholder="Ex.: 5511999999999"
+            className="w-full rounded-md border px-3 py-2 text-sm"
+          />
+          <button
+            onClick={() => { const n = phoneInput.replace(/\D+/g, ''); if (n) { setSelectedContact(n); fetchConversation(n); } }}
+            className="w-full rounded-md border px-3 py-2 text-sm"
+          >
+            Abrir
+          </button>
+        </div>
+      </aside>
      </div>
    );
  }
