@@ -39,6 +39,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
   const scrollToBottomNextRef = useRef(false);
   const lastMessageIdRef = useRef<string | null>(null);
   const conversationLimitRef = useRef<number>(50);
+  const selectedContactRef = useRef<string | null>(null);
   const lastCursorRef = useRef<{ lastTimestamp: string; lastUpdatedAt: string }>({
     lastTimestamp: new Date(0).toISOString(),
     lastUpdatedAt: new Date(0).toISOString()
@@ -361,14 +362,44 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
     setIsLoadingMessages(false);
   }, [directionFilter, getConversation, mergeMessages, preferLocal, scrollToBottom]);
 
+  const openContact = useCallback(
+    async (contact: string) => {
+      const n = (contact ?? '').replace(/\D+/g, '');
+      if (!n) return;
+      if (n.length < 7 || n.length > 15) {
+        setError('Esse contato não é um número suportado (somente telefones E.164).');
+        return;
+      }
+      setSelectedContact(n);
+      setMessages([]);
+      setConversationLimit(50);
+      setHasNewMessages(false);
+      lastMessageIdRef.current = null;
+      lastCursorRef.current = { lastTimestamp: new Date(0).toISOString(), lastUpdatedAt: new Date(0).toISOString() };
+      setUnreadByContact((prev) => {
+        if (!prev[n]) return prev;
+        const copy = { ...prev };
+        delete copy[n];
+        return copy;
+      });
+      await applyConversation(n, 50, { allowRetryLocal: true });
+    },
+    [applyConversation]
+  );
+
   useEffect(() => {
     conversationLimitRef.current = conversationLimit;
   }, [conversationLimit]);
 
   useEffect(() => {
-    if (!selectedContact) return;
-    void applyConversation(selectedContact, conversationLimitRef.current);
-  }, [applyConversation, selectedContact]);
+    selectedContactRef.current = selectedContact;
+  }, [selectedContact]);
+
+  useEffect(() => {
+    const c = selectedContactRef.current;
+    if (!c) return;
+    void applyConversation(c, conversationLimitRef.current, { allowRetryLocal: true });
+  }, [applyConversation, directionFilter, instanceId]);
  
    useEffect(() => {
      const phoneParam = searchParams.get('phone');
@@ -379,7 +410,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
     if (phoneParam && typeof phoneParam === 'string') {
       const n = phoneParam.replace(/\D+/g, '');
       if (n && n.length >= 7) {
-        setSelectedContact(n);
+        void openContact(n);
       }
     }
      // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -587,23 +618,6 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
     }
     return items;
   }, [dateLabel, messageKey, messages]);
-
-  const openContact = useCallback((contact: string) => {
-    const n = contact.replace(/\D+/g, '');
-    if (!n) return;
-    setSelectedContact(n);
-    setMessages([]);
-    setConversationLimit(50);
-    setHasNewMessages(false);
-    lastMessageIdRef.current = null;
-    lastCursorRef.current = { lastTimestamp: new Date(0).toISOString(), lastUpdatedAt: new Date(0).toISOString() };
-    setUnreadByContact((prev) => {
-      if (!prev[n]) return prev;
-      const copy = { ...prev };
-      delete copy[n];
-      return copy;
-    });
-  }, []);
 
   const canSend = !!selectedContact && normalizedPhone.length >= 7 && (text.trim().length > 0 || mediaUrl.trim().length > 0);
  
