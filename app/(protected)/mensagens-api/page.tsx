@@ -61,7 +61,29 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
     for (const m of incoming) {
       const key = messageKey(m);
       const prev = byKey.get(key);
-      byKey.set(key, prev ? { ...prev, ...m } : m);
+      if (!prev) {
+        byKey.set(key, m);
+        continue;
+      }
+      const merged: Message = { ...prev, ...m };
+      const preserveIfNull: Array<keyof Message> = [
+        'conversation',
+        'caption',
+        'mediaUrl',
+        'messageType',
+        'pushName',
+        'direction',
+        'phoneRaw',
+        'timestamp',
+        'updatedAt'
+      ];
+      for (const field of preserveIfNull) {
+        const nextValue = (m as any)[field];
+        if (nextValue === null || nextValue === undefined || nextValue === '') {
+          (merged as any)[field] = (prev as any)[field];
+        }
+      }
+      byKey.set(key, merged);
     }
     const out = Array.from(byKey.values());
     out.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
@@ -283,7 +305,17 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
       setIsLoadingMessages(false);
       return;
     }
-    setMessages(data);
+    setMessages((curr) => {
+      const phone = contact.replace(/\D+/g, '');
+      const isClient = (m: Message) => String(m.wamid ?? m.id ?? '').startsWith('client-');
+      const matchesDirection = (m: Message) => {
+        if (directionFilter === 'all') return true;
+        const isOut = m.direction === 'OUTBOUND' || !!m.fromMe;
+        return directionFilter === 'outbound' ? isOut : !isOut;
+      };
+      const optimistic = curr.filter((m) => isClient(m) && (m.phoneRaw ?? '') === phone && matchesDirection(m));
+      return mergeMessages(data as Message[], optimistic);
+    });
     lastMessageIdRef.current = data.length ? (data[data.length - 1]?.id ?? null) : null;
     setHasNewMessages(false);
     setUnreadByContact((prev) => {
@@ -296,9 +328,20 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
     });
 
     const lastTs = data.length ? data[data.length - 1]?.timestamp : null;
+    const lastUpdatedAt = (() => {
+      let maxIso = lastTs ? new Date(lastTs).toISOString() : new Date(0).toISOString();
+      for (const m of data as any[]) {
+        const u = m?.updatedAt ?? null;
+        if (!u) continue;
+        const a = new Date(maxIso).getTime();
+        const b = new Date(u).getTime();
+        if (!Number.isNaN(b) && b >= a) maxIso = new Date(u).toISOString();
+      }
+      return maxIso;
+    })();
     lastCursorRef.current = {
       lastTimestamp: lastTs ? new Date(lastTs).toISOString() : new Date(0).toISOString(),
-      lastUpdatedAt: new Date().toISOString()
+      lastUpdatedAt
     };
 
     requestAnimationFrame(() => {
@@ -316,7 +359,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
     });
 
     setIsLoadingMessages(false);
-  }, [getConversation, preferLocal, scrollToBottom]);
+  }, [directionFilter, getConversation, mergeMessages, preferLocal, scrollToBottom]);
 
   useEffect(() => {
     conversationLimitRef.current = conversationLimit;
