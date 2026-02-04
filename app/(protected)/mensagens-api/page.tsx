@@ -3,24 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
  import { useSearchParams } from 'next/navigation';
  import api from '../../../lib/api';
- 
- type Message = {
-   id: string;
-   wamid: string | null;
-   fromMe: boolean;
-   direction?: 'INBOUND' | 'OUTBOUND' | null;
-   conversation?: string | null;
-   caption?: string | null;
-   mediaUrl?: string | null;
-   messageType?: string | null;
-   deliveryStatus?: 'QUEUED' | 'SENT' | 'DELIVERED' | 'READ' | 'FAILED' | null;
-   timestamp: string;
-  updatedAt?: string;
-   pushName?: string | null;
-   phoneRaw?: string | null;
- };
- 
- type ChatItem = { id: string; name: string | null; contact: string; lastMessage?: { text: string; timestamp: string; fromMe: boolean } | null };
+import { getStoredAuth } from '../../../lib/auth-storage';
+import { ChatHeader } from '../../../components/mensagens-api/ChatHeader';
+import { ChatList } from '../../../components/mensagens-api/ChatList';
+import { Composer } from '../../../components/mensagens-api/Composer';
+import { MessagesList } from '../../../components/mensagens-api/MessagesList';
+import type { ChatItem, Message, RenderedMessageItem } from '../../../components/mensagens-api/types';
  
  export default function MensagensApiPage() {
    const searchParams = useSearchParams();
@@ -38,6 +26,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
   const [conversationLimit, setConversationLimit] = useState<number>(50);
   const [hasNewMessages, setHasNewMessages] = useState(false);
   const [unreadByContact, setUnreadByContact] = useState<Record<string, number>>({});
+  const [streamConnected, setStreamConnected] = useState(false);
+  const [realtimeMode, setRealtimeMode] = useState<'stream' | 'poll'>(() =>
+    process.env.NEXT_PUBLIC_MESSAGES_REALTIME_MODE === 'poll' ? 'poll' : 'stream'
+  );
    const [text, setText] = useState('');
    const [mediaUrl, setMediaUrl] = useState('');
    const [caption, setCaption] = useState('');
@@ -75,6 +67,132 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
     out.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
     return out;
   }, [messageKey]);
+
+  const buildApiUrl = useCallback((path: string, params?: Record<string, string>) => {
+    const base = (api.defaults.baseURL ?? '').replace(/\/+$/, '');
+    const url = new URL(`${base}${path.startsWith('/') ? path : `/${path}`}`);
+    for (const [k, v] of Object.entries(params ?? {})) {
+      if (v !== undefined && v !== null && String(v).length > 0) {
+        url.searchParams.set(k, String(v));
+      }
+    }
+    return url.toString();
+  }, []);
+
+  const applyIncomingMessages = useCallback((phone: string, incoming: Message[]) => {
+    if (!incoming.length) return;
+    const maxIso = (a: string, b: string) => (new Date(a).getTime() >= new Date(b).getTime() ? a : b);
+    setMessages((curr) => mergeMessages(curr, incoming));
+
+    const newest = incoming[incoming.length - 1];
+    lastCursorRef.current = {
+      lastTimestamp: maxIso(lastCursorRef.current.lastTimestamp, newest.timestamp),
+      lastUpdatedAt: newest.updatedAt ? maxIso(lastCursorRef.current.lastUpdatedAt, newest.updatedAt) : lastCursorRef.current.lastUpdatedAt
+    };
+    const newestText = newest.mediaUrl ? (newest.caption || 'Anexo') : (newest.conversation || '');
+    setChats((curr) => {
+      const updated = curr.map((c) =>
+        c.contact === phone
+          ? { ...c, lastMessage: { text: newestText || 'Mensagem', timestamp: newest.timestamp, fromMe: !!newest.fromMe } }
+          : c
+      );
+      if (!updated.some((c) => c.contact === phone)) {
+        updated.unshift({
+          id: phone,
+          name: newest.pushName ?? null,
+          contact: phone,
+          lastMessage: { text: newestText || 'Mensagem', timestamp: newest.timestamp, fromMe: !!newest.fromMe }
+        });
+      }
+      updated.sort((a, b) => {
+        const at = a.lastMessage?.timestamp ?? null;
+        const bt = b.lastMessage?.timestamp ?? null;
+        if (at && bt) return new Date(bt).getTime() - new Date(at).getTime();
+        if (at && !bt) return -1;
+        if (!at && bt) return 1;
+        return 0;
+      });
+      return updated;
+    });
+
+    const inboundCount = incoming.filter((m) => !(m.direction === 'OUTBOUND' || m.fromMe)).length;
+    if (isAtBottomRef.current) {
+      scrollToBottomNextRef.current = true;
+      requestAnimationFrame(() => scrollToBottom());
+    } else if (inboundCount > 0) {
+      setHasNewMessages(true);
+      setUnreadByContact((prev) => ({ ...prev, [phone]: (prev[phone] ?? 0) + inboundCount }));
+    }
+  }, [mergeMessages, scrollToBottom]);
+
+  const startMessageStream = useCallback(async (phone: string, signal: AbortSignal) => {
+    const stored = getStoredAuth();
+    const token = stored?.token ?? '';
+    if (!token) throw new Error('no_token');
+
+    const cursor = lastCursorRef.current;
+    const url = buildApiUrl('/integrations/evolution/messages/stream', {
+      phone: `+${phone}`,
+      afterTimestamp: cursor.lastTimestamp,
+      afterUpdatedAt: cursor.lastUpdatedAt,
+      limit: '200'
+    });
+
+    const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+    if (stored?.user?.apiKey) headers['x-tenant-key'] = stored.user.apiKey;
+
+    const resp = await fetch(url, { headers, signal });
+    if (!resp.ok || !resp.body) {
+      throw new Error(`stream_http_${resp.status}`);
+    }
+    setStreamConnected(true);
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let eventType: string | null = null;
+    let dataLines: string[] = [];
+
+    const flush = () => {
+      if (!dataLines.length) return;
+      const raw = dataLines.join('\n');
+      dataLines = [];
+      const type = eventType ?? 'message';
+      eventType = null;
+      if (type === 'keepalive') return;
+      try {
+        const parsed = JSON.parse(raw) as any;
+        applyIncomingMessages(phone, [parsed]);
+      } catch {
+        return;
+      }
+    };
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split('\n');
+      buffer = parts.pop() ?? '';
+      for (const rawLine of parts) {
+        const line = rawLine.replace(/\r$/, '');
+        if (line.length === 0) {
+          flush();
+          continue;
+        }
+        if (line.startsWith(':')) continue;
+        if (line.startsWith('event:')) {
+          eventType = line.slice(6).trim() || null;
+          continue;
+        }
+        if (line.startsWith('data:')) {
+          dataLines.push(line.slice(5).trimStart());
+          continue;
+        }
+      }
+    }
+    setStreamConnected(false);
+  }, [applyIncomingMessages, buildApiUrl]);
  
    useEffect(() => {
      const loadInstances = async () => {
@@ -294,14 +412,33 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
  
    useEffect(() => {
     if (!selectedContact) return;
-     const id = window.setInterval(() => {
-      const phone = selectedContact.replace(/\D+/g, '');
+    if (realtimeMode !== 'stream') return;
+    const phone = selectedContact.replace(/\D+/g, '');
+    if (!phone) return;
+    const ac = new AbortController();
+    setStreamConnected(false);
+    void startMessageStream(phone, ac.signal).catch(() => {
+      setStreamConnected(false);
+      setRealtimeMode('poll');
+    });
+    return () => {
+      ac.abort();
+    };
+  }, [realtimeMode, selectedContact, startMessageStream]);
+
+  useEffect(() => {
+    if (!selectedContact) return;
+    if (realtimeMode === 'stream' && streamConnected) return;
+    const phone = selectedContact.replace(/\D+/g, '');
+    if (!phone) return;
+    const intervalMs = realtimeMode === 'poll' ? 2000 : 10000;
+    const id = window.setInterval(() => {
       const cursor = lastCursorRef.current;
       void (async () => {
         try {
           const params: Record<string, any> = {
             phone,
-            limit: 50,
+            limit: 200,
             source: 'local',
             afterTimestamp: cursor.lastTimestamp,
             afterUpdatedAt: cursor.lastUpdatedAt
@@ -313,67 +450,27 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
           const incoming = Array.isArray(resp.data.data) ? resp.data.data : [];
           if (!incoming.length) return;
 
-          const newLastTimestamp = resp.data.cursor?.lastTimestamp ?? incoming[incoming.length - 1]?.timestamp ?? cursor.lastTimestamp;
-          const newLastUpdatedAt = resp.data.cursor?.lastUpdatedAt ?? cursor.lastUpdatedAt;
-          lastCursorRef.current = {
-            lastTimestamp: new Date(newLastTimestamp).toISOString(),
-            lastUpdatedAt: new Date(newLastUpdatedAt).toISOString()
-          };
-
           const lastId = incoming.length ? (incoming[incoming.length - 1]?.id ?? null) : null;
-          if (lastId && lastId !== lastMessageIdRef.current) {
-            lastMessageIdRef.current = lastId;
+          if (lastId) lastMessageIdRef.current = lastId;
+
+          const c = resp.data.cursor;
+          if (c?.lastTimestamp || c?.lastUpdatedAt) {
+            lastCursorRef.current = {
+              lastTimestamp: c?.lastTimestamp ? new Date(c.lastTimestamp).toISOString() : cursor.lastTimestamp,
+              lastUpdatedAt: c?.lastUpdatedAt ? new Date(c.lastUpdatedAt).toISOString() : cursor.lastUpdatedAt
+            };
           }
 
-          setMessages((curr) => mergeMessages(curr, incoming));
-
-          const newest = incoming[incoming.length - 1];
-          const newestText = newest.mediaUrl ? (newest.caption || 'Anexo') : (newest.conversation || '');
-          setChats((curr) => {
-            const updated = curr.map((c) =>
-              c.contact === phone
-                ? { ...c, lastMessage: { text: newestText || 'Mensagem', timestamp: newest.timestamp, fromMe: !!newest.fromMe } }
-                : c
-            );
-            if (!updated.some((c) => c.contact === phone)) {
-              updated.unshift({
-                id: phone,
-                name: newest.pushName ?? null,
-                contact: phone,
-                lastMessage: { text: newestText || 'Mensagem', timestamp: newest.timestamp, fromMe: !!newest.fromMe }
-              });
-            }
-            updated.sort((a, b) => {
-              const at = a.lastMessage?.timestamp ?? null;
-              const bt = b.lastMessage?.timestamp ?? null;
-              if (at && bt) return new Date(bt).getTime() - new Date(at).getTime();
-              if (at && !bt) return -1;
-              if (!at && bt) return 1;
-              return 0;
-            });
-            return updated;
-          });
-
-          const inboundCount = incoming.filter((m) => !(m.direction === 'OUTBOUND' || m.fromMe)).length;
-
-          if (isAtBottomRef.current) {
-            scrollToBottomNextRef.current = true;
-            requestAnimationFrame(() => scrollToBottom());
-          } else {
-            if (inboundCount > 0) {
-              setHasNewMessages(true);
-              setUnreadByContact((prev) => ({ ...prev, [phone]: (prev[phone] ?? 0) + inboundCount }));
-            }
-          }
+          applyIncomingMessages(phone, incoming);
         } catch {
           setHasNewMessages(false);
         }
       })();
-    }, 2000);
-     return () => {
-       window.clearInterval(id);
-     };
- }, [mergeMessages, scrollToBottom, selectedContact]);
+    }, intervalMs);
+    return () => {
+      window.clearInterval(id);
+    };
+  }, [applyIncomingMessages, realtimeMode, selectedContact, streamConnected]);
 
   const handleMessagesScroll = useCallback(() => {
     const el = messagesContainerRef.current;
@@ -435,7 +532,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
   };
 
   const renderedMessages = useMemo(() => {
-    const items: Array<{ type: 'date'; id: string; label: string } | { type: 'msg'; id: string; msg: Message }> = [];
+    const items: RenderedMessageItem[] = [];
     let lastDay: string | null = null;
     for (const m of messages) {
       const day = new Date(m.timestamp).toDateString();
@@ -447,263 +544,116 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
     }
     return items;
   }, [dateLabel, messageKey, messages]);
+
+  const openContact = useCallback((contact: string) => {
+    const n = contact.replace(/\D+/g, '');
+    if (!n) return;
+    setSelectedContact(n);
+    setMessages([]);
+    setConversationLimit(50);
+    setHasNewMessages(false);
+    lastMessageIdRef.current = null;
+    lastCursorRef.current = { lastTimestamp: new Date(0).toISOString(), lastUpdatedAt: new Date(0).toISOString() };
+    setUnreadByContact((prev) => {
+      if (!prev[n]) return prev;
+      const copy = { ...prev };
+      delete copy[n];
+      return copy;
+    });
+  }, []);
+
+  const canSend = !!selectedContact && normalizedPhone.length >= 7 && (text.trim().length > 0 || mediaUrl.trim().length > 0);
  
   return (
     <div className="flex h-[calc(100vh-100px)] gap-4">
-       <aside className="w-80 shrink-0 rounded-lg border bg-white">
-         <div className="border-b px-4 py-3">
-           <h2 className="text-lg font-semibold">Conversas (Evolution)</h2>
-           <div className="mt-2 flex items-center gap-2">
-             <select value={instanceId} onChange={(e) => setInstanceId(e.target.value)} className="rounded-md border px-2 py-1 text-xs" aria-label="Instância">
-               <option value="">Todas instâncias</option>
-               {instances.map((i) => (
-                 <option key={i.id} value={i.id}>{i.name ?? i.id}</option>
-               ))}
-             </select>
-             <input
-               value={chatSearch}
-               onChange={(e) => setChatSearch(e.target.value)}
-               placeholder="Buscar por número ou nome"
-               className="w-full rounded-md border px-3 py-2 text-sm"
-             />
-           </div>
-           <div className="mt-2 flex items-center gap-2">
-             <span className="text-xs text-gray-500">Direção:</span>
-             <select value={directionFilter} onChange={(e) => setDirectionFilter(e.target.value as any)} className="rounded-md border px-2 py-1 text-xs">
-               <option value="all">Todas</option>
-               <option value="inbound">Recebidas</option>
-               <option value="outbound">Enviadas</option>
-             </select>
-           </div>
-         </div>
-         <div className="h-full overflow-y-auto">
-           {isLoadingChats ? (
-             <div className="p-4">
-               <div className="space-y-2">
-                 {Array.from({ length: 6 }).map((_, i) => (
-                   <div key={i} className="flex items-center gap-3">
-                     <div className="h-8 w-8 animate-pulse rounded-full bg-gray-200" />
-                     <div className="h-3 w-40 animate-pulse rounded bg-gray-200" />
-                   </div>
-                 ))}
-               </div>
-             </div>
-           ) : (
-             <ul className="divide-y">
-              {filteredChats.map((chat) => (
-                <li key={`${chat.id}-${chat.contact}`}>
-                   <button
-                     onClick={() => {
-                       setSelectedContact(chat.contact);
-                       setMessages([]);
-                       setConversationLimit(50);
-                       setHasNewMessages(false);
-                       lastMessageIdRef.current = null;
-                      lastCursorRef.current = { lastTimestamp: new Date(0).toISOString(), lastUpdatedAt: new Date(0).toISOString() };
-                     }}
-                     className={[
-                       'flex w-full items-center gap-3 px-4 py-3 text-left transition',
-                       selectedContact === chat.contact ? 'bg-gray-50' : 'hover:bg-gray-50'
-                     ].join(' ')}
-                   >
-                     <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
-                       {(chat.name ?? chat.contact ?? 'C')[0]}
-                     </div>
-                     <div className="min-w-0">
-                       <div className="flex items-center gap-2">
-                        <p className="truncate text-sm font-semibold">{chat.name ?? (formatPhone(chat.contact) || 'Sem nome')}</p>
-                         <span className="ml-auto text-[11px] text-gray-400">{formatChatTime(chat.lastMessage?.timestamp ?? null)}</span>
-                       </div>
-                       <div className="flex items-center gap-2">
-                         <p className="truncate text-xs text-gray-500">{formatPhone(chat.contact)}</p>
-                         {!!unreadByContact[chat.contact] && (
-                           <span className="ml-auto rounded-full bg-green-500 px-2 py-0.5 text-[10px] font-semibold text-white">
-                             {unreadByContact[chat.contact]}
-                           </span>
-                         )}
-                       </div>
-                       {chat.lastMessage && (
-                         <p className="truncate text-xs text-gray-400">
-                           <span>{chat.lastMessage.fromMe ? '↗' : '↙'}</span>{' '}
-                           {chat.lastMessage.text}{' '}•{' '}
-                           {new Date(chat.lastMessage.timestamp).toLocaleString()}
-                         </p>
-                       )}
-                     </div>
-                   </button>
-                 </li>
-               ))}
-             </ul>
-           )}
-           <div className="border-t p-3">
-             <div className="space-y-2">
-               <label className="block text-xs text-gray-500">Abrir conversa por número</label>
-               <div className="flex gap-2">
-                 <input
-                   value={phoneInput}
-                   onChange={(e) => setPhoneInput(e.target.value)}
-                   placeholder="Ex.: 5511999999999"
-                   className="w-full rounded-md border px-3 py-2 text-sm"
-                 />
-                 <button
-                   onClick={() => {
-                     const n = phoneInput.replace(/\D+/g, '');
-                     if (n) {
-                       setSelectedContact(n);
-                       setMessages([]);
-                       setConversationLimit(50);
-                       setHasNewMessages(false);
-                       lastMessageIdRef.current = null;
-                     }
-                   }}
-                   className="rounded-md border px-3 py-2 text-sm"
-                 >
-                   Abrir
-                 </button>
-               </div>
-             </div>
-           </div>
-         </div>
-       </aside>
- 
+      <ChatList
+        instances={instances}
+        instanceId={instanceId}
+        onInstanceChange={setInstanceId}
+        chatSearch={chatSearch}
+        onChatSearchChange={setChatSearch}
+        directionFilter={directionFilter}
+        onDirectionFilterChange={setDirectionFilter}
+        isLoadingChats={isLoadingChats}
+        filteredChats={filteredChats}
+        selectedContact={selectedContact}
+        unreadByContact={unreadByContact}
+        formatPhone={formatPhone}
+        formatChatTime={formatChatTime}
+        onSelectChat={openContact}
+        phoneInput={phoneInput}
+        onPhoneInputChange={setPhoneInput}
+        onOpenNumber={() => openContact(phoneInput)}
+      />
+
       <section className="flex-1 rounded-lg border bg-[#0b141a]">
-        <div className="border-b border-[#202c33] px-4 py-3 text-[#e9edef]">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white">
-              {(selectedContact ? formatPhone(selectedContact) : 'C')[0]}
-            </div>
-            <div className="min-w-0">
-              <h2 className="truncate text-base font-semibold">{selectedContact ? formatPhone(selectedContact) : 'Selecione uma conversa'}</h2>
-              <p className="truncate text-xs text-[#8696a0]">{selectedContact ? `+${normalizedPhone}` : '—'}</p>
-            </div>
-            <div className="ml-auto flex items-center gap-2">
-              <button
-                onClick={() => {
-                  if (!selectedContact) return;
-                  scrollToBottomNextRef.current = true;
-                  void applyConversation(selectedContact, conversationLimitRef.current, { allowRetryLocal: true });
-                }}
-                className="rounded-md border border-[#202c33] bg-[#0b141a] px-2 py-1 text-xs text-[#e9edef]"
-              >
-                Atualizar
-              </button>
-            </div>
-          </div>
-        </div>
+        <ChatHeader
+          selectedContact={selectedContact}
+          normalizedPhone={normalizedPhone}
+          formatPhone={formatPhone}
+          realtimeMode={realtimeMode}
+          streamConnected={streamConnected}
+          onRefresh={() => {
+            if (!selectedContact) return;
+            scrollToBottomNextRef.current = true;
+            void applyConversation(selectedContact, conversationLimitRef.current, { allowRetryLocal: true });
+          }}
+          onForcePolling={() => {
+            setRealtimeMode('poll');
+            setStreamConnected(false);
+          }}
+          onRetryStream={() => {
+            setRealtimeMode('stream');
+          }}
+        />
         <div className="flex h-full flex-col">
-          <div ref={messagesContainerRef} onScroll={handleMessagesScroll} className="flex-1 overflow-y-auto p-6">
-             {!selectedContact && <div className="text-sm text-gray-500">Selecione uma conversa para visualizar.</div>}
-             {selectedContact && isLoadingMessages && (
-               <div className="space-y-2">
-                 {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="flex justify-start">
-                    <div className="h-14 w-64 animate-pulse rounded-2xl bg-[#202c33]" />
-                   </div>
-                 ))}
-               </div>
-             )}
-            {selectedContact && !isLoadingMessages && renderedMessages.map((it) => {
-              if (it.type === 'date') {
-                return (
-                  <div key={it.id} className="my-3 flex justify-center">
-                    <span className="rounded-full bg-[#202c33] px-3 py-1 text-[11px] text-[#e9edef]">{it.label}</span>
-                  </div>
-                );
-              }
-              const msg = it.msg;
-              const isMine = (msg.direction === 'OUTBOUND') || !!msg.fromMe;
-              return (
-                <div key={it.id} className={`mb-2 flex ${isMine ? 'justify-end' : 'justify-start'}`}>
-                  <div
-                    className={[
-                      'max-w-[75%] rounded-2xl px-3 py-2 text-sm',
-                      isMine ? 'bg-[#005c4b] text-white rounded-br-md' : 'bg-[#202c33] text-[#e9edef] rounded-bl-md'
-                    ].join(' ')}
-                  >
-                    {msg.mediaUrl ? (
-                      <div>
-                        <a href={msg.mediaUrl} target="_blank" rel="noreferrer" className="underline">
-                          Anexo
-                        </a>
-                        {msg.caption && <div className="mt-1 whitespace-pre-wrap">{msg.caption}</div>}
-                      </div>
-                    ) : (
-                      <p className="whitespace-pre-wrap">{msg.conversation ?? `[${msg.messageType ?? 'mensagem'}]`}</p>
-                    )}
-                    <div className="mt-1 flex items-center justify-end gap-2 text-[11px]">
-                      <span className={isMine ? 'text-white/70' : 'text-[#8696a0]'}>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                      {isMine && (
-                        <span className={statusColor(msg.deliveryStatus ?? null)}>{statusGlyph(msg.deliveryStatus ?? null)}</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-             {selectedContact && !isLoadingMessages && messages.length === 0 && (
-              <div className="text-sm text-[#8696a0]">Nenhuma mensagem.</div>
-             )}
-           </div>
-          <div className="border-t border-[#202c33] p-3 text-[#e9edef]">
-            <div className="mb-2 flex items-center gap-2">
-              <span className="text-xs text-[#8696a0]">{selectedContact ? formatPhone(selectedContact) : '—'}</span>
-              <div className="ml-auto flex items-center gap-2">
-                {hasNewMessages && (
-                  <button
-                    onClick={() => {
-                      if (selectedContact) {
-                        scrollToBottomNextRef.current = true;
-                        scrollToBottom();
-                        setHasNewMessages(false);
-                        setUnreadByContact((prev) => {
-                          const phone = selectedContact.replace(/\D+/g, '');
-                          if (!phone || !prev[phone]) return prev;
-                          const copy = { ...prev };
-                          delete copy[phone];
-                          return copy;
-                        });
-                      }
-                    }}
-                    className="rounded-md border border-[#202c33] bg-[#0b141a] px-2 py-1 text-xs text-[#e9edef]"
-                  >
-                    Novas mensagens
-                  </button>
-                )}
-                <select value={directionFilter} onChange={(e) => setDirectionFilter(e.target.value as any)} className="rounded-md border border-[#202c33] bg-[#0b141a] px-2 py-1 text-xs text-[#e9edef]">
-                  <option value="all">Todas</option>
-                  <option value="inbound">Recebidas</option>
-                  <option value="outbound">Enviadas</option>
-                </select>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder="Digite uma mensagem"
-                className="flex-1 rounded-2xl border border-[#202c33] bg-[#202c33] px-4 py-2 text-sm text-[#e9edef] placeholder-[#8696a0] focus:outline-none"
-                aria-label="Mensagem"
-              />
-              <button onClick={sendMessage} className="rounded-full bg-[#22c55e] px-4 py-2 text-sm font-semibold text-white" aria-label="Enviar">
-                Enviar
-              </button>
-            </div>
+          <MessagesList
+            selectedContact={selectedContact}
+            isLoadingMessages={isLoadingMessages}
+            renderedMessages={selectedContact ? renderedMessages : []}
+            onScroll={handleMessagesScroll}
+            messagesContainerRef={messagesContainerRef}
+            statusGlyph={statusGlyph}
+            statusColor={statusColor}
+          />
+          <Composer
+            selectedContact={selectedContact}
+            displayPhone={formatPhone(selectedContact)}
+            text={text}
+            onTextChange={setText}
+            canSend={canSend}
+            onSend={sendMessage}
+            hasNewMessages={hasNewMessages}
+            onJumpToLatest={() => {
+              if (!selectedContact) return;
+              scrollToBottomNextRef.current = true;
+              scrollToBottom();
+              setHasNewMessages(false);
+              setUnreadByContact((prev) => {
+                const phone = selectedContact.replace(/\D+/g, '');
+                if (!phone || !prev[phone]) return prev;
+                const copy = { ...prev };
+                delete copy[phone];
+                return copy;
+              });
+            }}
+          />
           {error && (
-            <div className="mt-2 text-sm text-red-400">
+            <div className="-mt-2 px-3 pb-3 text-sm text-red-400">
               {error}
               <button
-                onClick={() => { setPreferLocal(true); setError(null); }}
+                onClick={() => {
+                  setPreferLocal(true);
+                  setError(null);
+                }}
                 className="ml-2 rounded-md border border-[#202c33] bg-[#0b141a] px-2 py-1 text-xs text-[#e9edef]"
               >
                 Ler fonte local
               </button>
             </div>
           )}
-          </div>
-         </div>
-       </section>
- 
-      
+        </div>
+      </section>
      </div>
    );
  }
