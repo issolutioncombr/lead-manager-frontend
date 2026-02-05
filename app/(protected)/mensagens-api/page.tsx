@@ -251,7 +251,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
          if (!at && bt) return 1;
          return 0;
        });
-       setChats(data);
+      setChats(data);
      } catch (e) {
        const status = (e as any)?.response?.status;
       setError(`Não foi possível carregar as conversas${status ? ` (código ${status})` : ''}.`);
@@ -270,12 +270,13 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
      return chats.filter((c) => (c.name ?? '').toLowerCase().includes(q) || c.contact.includes(q));
    }, [chats, chatSearch]);
  
-  const getConversation = useCallback(async (contact: string, limit: number, sourceOverride?: 'provider' | 'local') => {
+  const getConversation = useCallback(async (contact: string, limit: number, remoteJid?: string | null, sourceOverride?: 'provider' | 'local') => {
      const phone = contact.replace(/\D+/g, '');
      if (!phone || phone.length < 7) return;
      try {
        const params: Record<string, any> = { phone };
        if (instanceId) params.instanceId = instanceId;
+        if (remoteJid) params.remoteJid = remoteJid;
        if (directionFilter !== 'all') params.direction = directionFilter;
       params.limit = limit;
       const resp = await api.get<{ data: Message[] }>(
@@ -290,17 +291,17 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
      }
   }, [directionFilter, instanceId, preferLocal]);
 
-  const applyConversation = useCallback(async (contact: string, limit: number, opts?: { preserveScroll?: boolean; allowRetryLocal?: boolean }) => {
+  const applyConversation = useCallback(async (contact: string, limit: number, opts?: { preserveScroll?: boolean; allowRetryLocal?: boolean; remoteJid?: string | null }) => {
     const el = messagesContainerRef.current;
     const prevScrollHeight = opts?.preserveScroll ? (el?.scrollHeight ?? 0) : 0;
     const prevScrollTop = opts?.preserveScroll ? (el?.scrollTop ?? 0) : 0;
 
     setIsLoadingMessages(true);
     setError(null);
-    let data = await getConversation(contact, limit);
+    let data = await getConversation(contact, limit, opts?.remoteJid ?? null);
     if (!Array.isArray(data) && !preferLocal && opts?.allowRetryLocal !== false) {
       setPreferLocal(true);
-      data = await getConversation(contact, limit, 'local');
+      data = await getConversation(contact, limit, opts?.remoteJid ?? null, 'local');
     }
     if (!Array.isArray(data)) {
       setIsLoadingMessages(false);
@@ -363,7 +364,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
   }, [directionFilter, getConversation, mergeMessages, preferLocal, scrollToBottom]);
 
   const openContact = useCallback(
-    async (contact: string) => {
+    async (contact: string, remoteJid?: string | null) => {
       const n = (contact ?? '').replace(/\D+/g, '');
       if (!n) return;
       if (n.length < 7 || n.length > 15) {
@@ -382,7 +383,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
         delete copy[n];
         return copy;
       });
-      await applyConversation(n, 50, { allowRetryLocal: true });
+      await applyConversation(n, 50, { allowRetryLocal: true, remoteJid: remoteJid ?? null });
     },
     [applyConversation]
   );
@@ -637,7 +638,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
         unreadByContact={unreadByContact}
         formatPhone={formatPhone}
         formatChatTime={formatChatTime}
-        onSelectChat={openContact}
+        onSelectChat={(contact, remoteJid) => void openContact(contact, remoteJid)}
         phoneInput={phoneInput}
         onPhoneInputChange={setPhoneInput}
         onOpenNumber={() => openContact(phoneInput)}

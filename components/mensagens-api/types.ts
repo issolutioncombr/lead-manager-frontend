@@ -18,10 +18,10 @@ export type ChatItem = {
   id: string;
   name: string | null;
   contact: string;
+  remoteJid?: string | null;
   lastMessage?: { text: string; timestamp: string; fromMe: boolean } | null;
 };
 
 export type RenderedMessageItem =
   | { type: 'date'; id: string; label: string }
   | { type: 'msg'; id: string; msg: Message };
-
