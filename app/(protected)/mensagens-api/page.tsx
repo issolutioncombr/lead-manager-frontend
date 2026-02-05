@@ -225,8 +225,8 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
         setInstances(
           list
             .map((x: any) => ({
-              id: x.instanceId ?? x.id ?? x.instanceName ?? x.name ?? 'unknown',
-              name: x.name ?? x.instanceId ?? x.id ?? null
+              id: x.providerInstanceId ?? x.instanceId ?? '',
+              name: x.name ?? x.number ?? x.instanceId ?? null
             }))
             .filter((x: any) => typeof x.id === 'string' && x.id.length > 0)
         );
