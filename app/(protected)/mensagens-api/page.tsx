@@ -40,6 +40,9 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
   const lastMessageIdRef = useRef<string | null>(null);
   const conversationLimitRef = useRef<number>(50);
   const selectedContactRef = useRef<string | null>(null);
+  const selectedRemoteJidRef = useRef<string | null>(null);
+  const conversationRequestSeqRef = useRef(0);
+  const messagesRef = useRef<Message[]>([]);
   const lastCursorRef = useRef<{ lastTimestamp: string; lastUpdatedAt: string }>({
     lastTimestamp: new Date(0).toISOString(),
     lastUpdatedAt: new Date(0).toISOString()
@@ -226,7 +229,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
           list
             .map((x: any) => ({
               id: x.providerInstanceId ?? x.instanceId ?? '',
-              name: x.name ?? x.number ?? x.instanceId ?? null
+              name: x.number ?? x.name ?? x.instanceId ?? null
             }))
             .filter((x: any) => typeof x.id === 'string' && x.id.length > 0)
         );
@@ -292,6 +295,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
   }, [directionFilter, instanceId, preferLocal]);
 
   const applyConversation = useCallback(async (contact: string, limit: number, opts?: { preserveScroll?: boolean; allowRetryLocal?: boolean; remoteJid?: string | null }) => {
+    const requestSeq = ++conversationRequestSeqRef.current;
     const el = messagesContainerRef.current;
     const prevScrollHeight = opts?.preserveScroll ? (el?.scrollHeight ?? 0) : 0;
     const prevScrollTop = opts?.preserveScroll ? (el?.scrollTop ?? 0) : 0;
@@ -307,7 +311,12 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
       setIsLoadingMessages(false);
       return;
     }
+    if (requestSeq !== conversationRequestSeqRef.current || selectedContactRef.current !== contact) {
+      setIsLoadingMessages(false);
+      return;
+    }
     setMessages((curr) => {
+      if (!data.length) return curr;
       const phone = contact.replace(/\D+/g, '');
       const isClient = (m: Message) => String(m.wamid ?? m.id ?? '').startsWith('client-');
       const matchesDirection = (m: Message) => {
@@ -316,35 +325,38 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
         return directionFilter === 'outbound' ? isOut : !isOut;
       };
       const optimistic = curr.filter((m) => isClient(m) && (m.phoneRaw ?? '') === phone && matchesDirection(m));
-      return mergeMessages(data as Message[], optimistic);
+      const merged = mergeMessages(curr, data as Message[]);
+      return mergeMessages(merged, optimistic);
     });
-    lastMessageIdRef.current = data.length ? (data[data.length - 1]?.id ?? null) : null;
-    setHasNewMessages(false);
-    setUnreadByContact((prev) => {
-      const phone = contact.replace(/\D+/g, '');
-      if (!phone) return prev;
-      if (!prev[phone]) return prev;
-      const copy = { ...prev };
-      delete copy[phone];
-      return copy;
-    });
+    if (data.length) {
+      lastMessageIdRef.current = data[data.length - 1]?.id ?? null;
+      setHasNewMessages(false);
+      setUnreadByContact((prev) => {
+        const phone = contact.replace(/\D+/g, '');
+        if (!phone) return prev;
+        if (!prev[phone]) return prev;
+        const copy = { ...prev };
+        delete copy[phone];
+        return copy;
+      });
 
-    const lastTs = data.length ? data[data.length - 1]?.timestamp : null;
-    const lastUpdatedAt = (() => {
-      let maxIso = lastTs ? new Date(lastTs).toISOString() : new Date(0).toISOString();
-      for (const m of data as any[]) {
-        const u = m?.updatedAt ?? null;
-        if (!u) continue;
-        const a = new Date(maxIso).getTime();
-        const b = new Date(u).getTime();
-        if (!Number.isNaN(b) && b >= a) maxIso = new Date(u).toISOString();
-      }
-      return maxIso;
-    })();
-    lastCursorRef.current = {
-      lastTimestamp: lastTs ? new Date(lastTs).toISOString() : new Date(0).toISOString(),
-      lastUpdatedAt
-    };
+      const lastTs = data[data.length - 1]?.timestamp ?? null;
+      const lastUpdatedAt = (() => {
+        let maxIso = lastTs ? new Date(lastTs).toISOString() : new Date(0).toISOString();
+        for (const m of data as any[]) {
+          const u = m?.updatedAt ?? null;
+          if (!u) continue;
+          const a = new Date(maxIso).getTime();
+          const b = new Date(u).getTime();
+          if (!Number.isNaN(b) && b >= a) maxIso = new Date(u).toISOString();
+        }
+        return maxIso;
+      })();
+      lastCursorRef.current = {
+        lastTimestamp: lastTs ? new Date(lastTs).toISOString() : new Date(0).toISOString(),
+        lastUpdatedAt
+      };
+    }
 
     requestAnimationFrame(() => {
       const target = messagesContainerRef.current;
@@ -371,7 +383,9 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
         setError('Esse contato não é um número suportado (somente telefones E.164).');
         return;
       }
+      selectedRemoteJidRef.current = remoteJid ?? null;
       setSelectedContact(n);
+      selectedContactRef.current = n;
       setMessages([]);
       setConversationLimit(50);
       setHasNewMessages(false);
@@ -397,9 +411,17 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
   }, [selectedContact]);
 
   useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  useEffect(() => {
     const c = selectedContactRef.current;
     if (!c) return;
-    void applyConversation(c, conversationLimitRef.current, { allowRetryLocal: true });
+    setMessages([]);
+    setConversationLimit(50);
+    lastMessageIdRef.current = null;
+    lastCursorRef.current = { lastTimestamp: new Date(0).toISOString(), lastUpdatedAt: new Date(0).toISOString() };
+    void applyConversation(c, 50, { allowRetryLocal: true, remoteJid: selectedRemoteJidRef.current });
   }, [applyConversation, directionFilter, instanceId]);
  
    useEffect(() => {
@@ -558,7 +580,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
       const next = Math.min(200, conversationLimit + 50);
       if (next !== conversationLimit) {
         setConversationLimit(next);
-        void applyConversation(selectedContact, next, { preserveScroll: true });
+        void applyConversation(selectedContact, next, { preserveScroll: true, allowRetryLocal: true, remoteJid: selectedRemoteJidRef.current });
       }
     }
   }, [applyConversation, conversationLimit, isLoadingMessages, selectedContact]);
