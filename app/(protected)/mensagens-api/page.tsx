@@ -18,6 +18,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
    const [chatSearch, setChatSearch] = useState('');
    const [phoneInput, setPhoneInput] = useState('');
    const [selectedContact, setSelectedContact] = useState<string | null>(null);
+  const [selectedName, setSelectedName] = useState<string | null>(null);
    const [messages, setMessages] = useState<Message[]>([]);
    const [isLoadingChats, setIsLoadingChats] = useState(false);
    const [isLoadingMessages, setIsLoadingMessages] = useState(false);
@@ -376,7 +377,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
   }, [directionFilter, getConversation, mergeMessages, preferLocal, scrollToBottom]);
 
   const openContact = useCallback(
-    async (contact: string, remoteJid?: string | null) => {
+    async (contact: string, remoteJid?: string | null, name?: string | null) => {
       const n = (contact ?? '').replace(/\D+/g, '');
       if (!n) return;
       if (n.length < 7 || n.length > 15) {
@@ -386,6 +387,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
       selectedRemoteJidRef.current = remoteJid ?? null;
       setSelectedContact(n);
       selectedContactRef.current = n;
+      setSelectedName((name ?? '').trim() ? (name ?? null) : null);
       setMessages([]);
       setConversationLimit(50);
       setHasNewMessages(false);
@@ -433,7 +435,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
     if (phoneParam && typeof phoneParam === 'string') {
       const n = phoneParam.replace(/\D+/g, '');
       if (n && n.length >= 7) {
-        void openContact(n);
+        void openContact(n, null, null);
       }
     }
      // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -643,6 +645,12 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
   }, [dateLabel, messageKey, messages]);
 
   const canSend = !!selectedContact && normalizedPhone.length >= 7 && (text.trim().length > 0 || mediaUrl.trim().length > 0);
+  const outgoingLabel = useMemo(() => {
+    const match = instances.find((i) => i.id === instanceId);
+    const label = match?.name ?? null;
+    if (label && String(label).trim()) return String(label).trim();
+    return 'CRM';
+  }, [instanceId, instances]);
  
   return (
     <div className="flex h-[calc(100vh-100px)] gap-4">
@@ -660,7 +668,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
         unreadByContact={unreadByContact}
         formatPhone={formatPhone}
         formatChatTime={formatChatTime}
-        onSelectChat={(contact, remoteJid) => void openContact(contact, remoteJid)}
+        onSelectChat={(contact, remoteJid, name) => void openContact(contact, remoteJid, name)}
         phoneInput={phoneInput}
         onPhoneInputChange={setPhoneInput}
         onOpenNumber={() => openContact(phoneInput)}
@@ -669,6 +677,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
       <section className="flex-1 rounded-lg border bg-[#0b141a]">
         <ChatHeader
           selectedContact={selectedContact}
+          selectedName={selectedName}
           normalizedPhone={normalizedPhone}
           formatPhone={formatPhone}
           realtimeMode={realtimeMode}
@@ -689,6 +698,9 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
         <div className="flex h-full flex-col">
           <MessagesList
             selectedContact={selectedContact}
+            selectedName={selectedName}
+            formatPhone={formatPhone}
+            outgoingLabel={outgoingLabel}
             isLoadingMessages={isLoadingMessages}
             renderedMessages={selectedContact ? renderedMessages : []}
             onScroll={handleMessagesScroll}

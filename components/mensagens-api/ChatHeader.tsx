@@ -1,5 +1,6 @@
 export function ChatHeader(props: {
   selectedContact: string | null;
+  selectedName?: string | null;
   normalizedPhone: string;
   formatPhone: (raw?: string | null) => string;
   realtimeMode: 'stream' | 'poll';
@@ -8,15 +9,17 @@ export function ChatHeader(props: {
   onForcePolling: () => void;
   onRetryStream: () => void;
 }) {
-  const title = props.selectedContact ? props.formatPhone(props.selectedContact) : 'Selecione uma conversa';
-  const subtitle = props.selectedContact ? `+${props.normalizedPhone}` : '—';
+  const phoneDisplay = props.selectedContact ? props.formatPhone(props.selectedContact) : null;
+  const title = props.selectedContact ? (props.selectedName || phoneDisplay || `+${props.normalizedPhone}`) : 'Selecione uma conversa';
+  const subtitle = props.selectedContact ? (phoneDisplay ? `${phoneDisplay} • +${props.normalizedPhone}` : `+${props.normalizedPhone}`) : '—';
+  const avatarLetter = (props.selectedName || phoneDisplay || 'C').trim()[0] ?? 'C';
   const badge = props.realtimeMode === 'stream' ? (props.streamConnected ? 'Tempo real' : 'Conectando') : 'Polling';
 
   return (
     <div className="border-b border-[#202c33] px-4 py-3 text-[#e9edef]">
       <div className="flex items-center gap-3">
         <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white">
-          {(props.selectedContact ? props.formatPhone(props.selectedContact) : 'C')[0]}
+          {avatarLetter}
         </div>
         <div className="min-w-0">
           <h2 className="truncate text-base font-semibold">{title}</h2>
@@ -52,4 +55,3 @@ export function ChatHeader(props: {
     </div>
   );
 }
-

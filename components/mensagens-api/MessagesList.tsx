@@ -2,6 +2,9 @@ import { RenderedMessageItem } from './types';
 
 export function MessagesList(props: {
   selectedContact: string | null;
+  selectedName?: string | null;
+  formatPhone: (raw?: string | null) => string;
+  outgoingLabel?: string | null;
   isLoadingMessages: boolean;
   renderedMessages: RenderedMessageItem[];
   onScroll: () => void;
@@ -18,6 +21,13 @@ export function MessagesList(props: {
       return null;
     }
   };
+  const avatarLetter = (value: string) => {
+    const t = (value ?? '').trim();
+    if (!t) return '•';
+    return t[0] ?? '•';
+  };
+  const contactLabel = props.selectedName ?? (props.selectedContact ? props.formatPhone(props.selectedContact) : null) ?? 'C';
+  const outLabel = props.outgoingLabel ?? 'CRM';
 
   return (
     <div ref={props.messagesContainerRef} onScroll={props.onScroll} className="flex-1 overflow-y-auto p-6">
@@ -45,9 +55,14 @@ export function MessagesList(props: {
           const isMine = msg.direction === 'OUTBOUND' || !!msg.fromMe;
           return (
             <div key={it.id} className={`mb-2 flex ${isMine ? 'justify-end' : 'justify-start'}`}>
+              {!isMine && (
+                <div className="mr-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs text-white">
+                  {avatarLetter(contactLabel)}
+                </div>
+              )}
               <div
                 className={[
-                  'max-w-[75%] rounded-2xl px-3 py-2 text-sm',
+                  'max-w-[75%] min-w-0 rounded-2xl px-3 py-2 text-sm break-words',
                   isMine ? 'bg-[#005c4b] text-white rounded-br-md' : 'bg-[#202c33] text-[#e9edef] rounded-bl-md'
                 ].join(' ')}
               >
@@ -60,10 +75,10 @@ export function MessagesList(props: {
                     ) : (
                       <span>Anexo</span>
                     )}
-                    {msg.caption && <div className="mt-1 whitespace-pre-wrap">{msg.caption}</div>}
+                    {msg.caption && <div className="mt-1 whitespace-pre-wrap break-words">{msg.caption}</div>}
                   </div>
                 ) : (
-                  <p className="whitespace-pre-wrap">{msg.conversation ?? `[${msg.messageType ?? 'mensagem'}]`}</p>
+                  <p className="whitespace-pre-wrap break-words">{msg.conversation ?? `[${msg.messageType ?? 'mensagem'}]`}</p>
                 )}
                 <div className="mt-1 flex items-center justify-end gap-2 text-[11px]">
                   <span className={isMine ? 'text-white/70' : 'text-[#8696a0]'}>
@@ -72,6 +87,11 @@ export function MessagesList(props: {
                   {isMine && <span className={props.statusColor(msg.deliveryStatus ?? null)}>{props.statusGlyph(msg.deliveryStatus ?? null)}</span>}
                 </div>
               </div>
+              {isMine && (
+                <div className="ml-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs text-white">
+                  {avatarLetter(outLabel)}
+                </div>
+              )}
             </div>
           );
         })}
