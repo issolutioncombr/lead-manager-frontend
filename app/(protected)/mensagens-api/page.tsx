@@ -602,9 +602,16 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
    const formatPhone = (raw?: string | null) => {
      if (!raw) return '';
      const d = raw.replace(/\D+/g, '');
-     if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
-     if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
-     return raw;
+    if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+    if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+    if (d.startsWith('55') && (d.length === 12 || d.length === 13)) {
+      const local = d.slice(2);
+      if (local.length === 11) return `+55 (${local.slice(0, 2)}) ${local.slice(2, 7)}-${local.slice(7)}`;
+      if (local.length === 10) return `+55 (${local.slice(0, 2)}) ${local.slice(2, 6)}-${local.slice(6)}`;
+      return `+${d}`;
+    }
+    if (d.length >= 7 && d.length <= 15) return `+${d}`;
+    return raw;
    };
 
   const formatChatTime = (iso?: string | null) => {
