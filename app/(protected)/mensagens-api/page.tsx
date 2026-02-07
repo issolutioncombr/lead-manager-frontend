@@ -247,6 +247,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
        setError(null);
        const params: Record<string, any> = {};
        if (instanceId) params.instanceId = instanceId;
+      params.limit = 500;
       const resp = await api.get<{ data: ChatItem[] }>('/integrations/evolution/messages/chats', { params: { ...params, source: preferLocal ? 'local' : 'provider' } });
        const data = Array.isArray(resp.data.data) ? resp.data.data : [];
        data.sort((a, b) => {
