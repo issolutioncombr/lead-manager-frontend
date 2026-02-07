@@ -1,6 +1,7 @@
 export function ChatHeader(props: {
   selectedContact: string | null;
   selectedName?: string | null;
+  avatarUrl?: string | null;
   normalizedPhone: string;
   formatPhone: (raw?: string | null) => string;
   realtimeMode: 'stream' | 'poll';
@@ -18,8 +19,8 @@ export function ChatHeader(props: {
   return (
     <div className="border-b border-[#202c33] px-4 py-3 text-[#e9edef]">
       <div className="flex items-center gap-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white">
-          {avatarLetter}
+        <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-white/10 text-white">
+          {props.avatarUrl ? <img src={props.avatarUrl} alt="" className="h-full w-full object-cover" /> : avatarLetter}
         </div>
         <div className="min-w-0">
           <h2 className="truncate text-base font-semibold">{title}</h2>

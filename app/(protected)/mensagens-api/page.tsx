@@ -13,12 +13,13 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
  export default function MensagensApiPage() {
    const searchParams = useSearchParams();
    const [instanceId, setInstanceId] = useState<string>('');
-   const [instances, setInstances] = useState<Array<{ id: string; name?: string | null }>>([]);
+  const [instances, setInstances] = useState<Array<{ id: string; name?: string | null; profilePicUrl?: string | null }>>([]);
    const [chats, setChats] = useState<ChatItem[]>([]);
    const [chatSearch, setChatSearch] = useState('');
    const [phoneInput, setPhoneInput] = useState('');
    const [selectedContact, setSelectedContact] = useState<string | null>(null);
   const [selectedName, setSelectedName] = useState<string | null>(null);
+  const [selectedAvatarUrl, setSelectedAvatarUrl] = useState<string | null>(null);
    const [messages, setMessages] = useState<Message[]>([]);
    const [isLoadingChats, setIsLoadingChats] = useState(false);
    const [isLoadingMessages, setIsLoadingMessages] = useState(false);
@@ -230,7 +231,8 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
           list
             .map((x: any) => ({
               id: x.providerInstanceId ?? x.instanceId ?? '',
-              name: x.number ?? x.name ?? x.instanceId ?? null
+              name: x.number ?? x.name ?? x.instanceId ?? null,
+              profilePicUrl: x.profilePicUrl ?? null
             }))
             .filter((x: any) => typeof x.id === 'string' && x.id.length > 0)
         );
@@ -384,6 +386,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
         setError('Esse contato não é um número suportado (somente telefones E.164).');
         return;
       }
+      setSelectedAvatarUrl(null);
       selectedRemoteJidRef.current = remoteJid ?? null;
       setSelectedContact(n);
       selectedContactRef.current = n;
@@ -399,9 +402,18 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
         delete copy[n];
         return copy;
       });
+      try {
+        const resp = await api.get<{ profilePicUrl: string | null }>('/integrations/evolution/messages/profile-pic', {
+          params: {
+            jid: (remoteJid ?? '').trim() || `${n}@s.whatsapp.net`,
+            instanceId: instanceId || undefined
+          }
+        });
+        setSelectedAvatarUrl(resp.data.profilePicUrl ?? null);
+      } catch {}
       await applyConversation(n, 50, { allowRetryLocal: true, remoteJid: remoteJid ?? null });
     },
-    [applyConversation]
+    [applyConversation, instanceId]
   );
 
   useEffect(() => {
@@ -651,6 +663,11 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
     if (label && String(label).trim()) return String(label).trim();
     return 'CRM';
   }, [instanceId, instances]);
+
+  const outgoingAvatarUrl = useMemo(() => {
+    const match = instances.find((i) => i.id === instanceId);
+    return match?.profilePicUrl ?? null;
+  }, [instanceId, instances]);
  
   return (
     <div className="flex h-[calc(100vh-100px)] gap-4">
@@ -678,6 +695,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
         <ChatHeader
           selectedContact={selectedContact}
           selectedName={selectedName}
+          avatarUrl={selectedAvatarUrl}
           normalizedPhone={normalizedPhone}
           formatPhone={formatPhone}
           realtimeMode={realtimeMode}
@@ -699,8 +717,10 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
           <MessagesList
             selectedContact={selectedContact}
             selectedName={selectedName}
+            incomingAvatarUrl={selectedAvatarUrl}
             formatPhone={formatPhone}
             outgoingLabel={outgoingLabel}
+            outgoingAvatarUrl={outgoingAvatarUrl}
             isLoadingMessages={isLoadingMessages}
             renderedMessages={selectedContact ? renderedMessages : []}
             onScroll={handleMessagesScroll}

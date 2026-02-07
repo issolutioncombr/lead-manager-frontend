@@ -19,6 +19,7 @@ export type ChatItem = {
   name: string | null;
   contact: string;
   remoteJid?: string | null;
+  avatarUrl?: string | null;
   lastMessage?: { text: string; timestamp: string; fromMe: boolean } | null;
 };
 

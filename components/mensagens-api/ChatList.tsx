@@ -76,14 +76,18 @@ export function ChatList(props: {
                 <button
                   onClick={() => props.onSelectChat(chat.contact, chat.remoteJid ?? null, chat.name ?? null)}
                   className={[
-                    'flex w-full items-center gap-3 px-4 py-3 text-left transition',
+                    'flex w-full items-center gap-3 overflow-hidden px-4 py-3 text-left transition',
                     props.selectedContact === chat.contact ? 'bg-gray-50' : 'hover:bg-gray-50'
                   ].join(' ')}
                 >
-                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    {(chat.name ?? chat.contact ?? 'C')[0]}
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-primary">
+                    {chat.avatarUrl ? (
+                      <img src={chat.avatarUrl} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      (chat.name ?? chat.contact ?? 'C')[0]
+                    )}
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <p className="truncate text-sm font-semibold">
                         {chat.name ?? (props.formatPhone(chat.contact) || 'Sem nome')}
@@ -101,9 +105,9 @@ export function ChatList(props: {
                       )}
                     </div>
                     {chat.lastMessage && (
-                      <p className="truncate text-xs text-gray-400">
+                      <p className="min-w-0 truncate text-xs text-gray-400">
                         <span>{chat.lastMessage.fromMe ? '↗' : '↙'}</span> {chat.lastMessage.text} •{' '}
-                        {new Date(chat.lastMessage.timestamp).toLocaleString()}
+                        {new Date(chat.lastMessage.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </p>
                     )}
                   </div>
