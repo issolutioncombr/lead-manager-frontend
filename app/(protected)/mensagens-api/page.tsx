@@ -380,14 +380,14 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
   }, [directionFilter, getConversation, mergeMessages, preferLocal, scrollToBottom]);
 
   const openContact = useCallback(
-    async (contact: string, remoteJid?: string | null, name?: string | null) => {
+    async (contact: string, remoteJid?: string | null, name?: string | null, avatarUrl?: string | null) => {
       const n = (contact ?? '').replace(/\D+/g, '');
       if (!n) return;
       if (n.length < 7 || n.length > 15) {
         setError('Esse contato não é um número suportado (somente telefones E.164).');
         return;
       }
-      setSelectedAvatarUrl(null);
+      setSelectedAvatarUrl(avatarUrl ?? null);
       selectedRemoteJidRef.current = remoteJid ?? null;
       setSelectedContact(n);
       selectedContactRef.current = n;
@@ -410,8 +410,10 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
             instanceId: instanceId || undefined
           }
         });
-        setSelectedAvatarUrl(resp.data.profilePicUrl ?? null);
-      } catch {}
+        setSelectedAvatarUrl(resp.data.profilePicUrl ?? avatarUrl ?? null);
+      } catch {
+        setSelectedAvatarUrl(avatarUrl ?? null);
+      }
       await applyConversation(n, 50, { allowRetryLocal: true, remoteJid: remoteJid ?? null });
     },
     [applyConversation, instanceId]
@@ -448,7 +450,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
     if (phoneParam && typeof phoneParam === 'string') {
       const n = phoneParam.replace(/\D+/g, '');
       if (n && n.length >= 7) {
-        void openContact(n, null, null);
+        void openContact(n, null, null, null);
       }
     }
      // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -693,10 +695,10 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
         unreadByContact={unreadByContact}
         formatPhone={formatPhone}
         formatChatTime={formatChatTime}
-        onSelectChat={(contact, remoteJid, name) => void openContact(contact, remoteJid, name)}
+        onSelectChat={(contact, remoteJid, name, avatarUrl) => void openContact(contact, remoteJid, name, avatarUrl)}
         phoneInput={phoneInput}
         onPhoneInputChange={setPhoneInput}
-        onOpenNumber={() => openContact(phoneInput)}
+        onOpenNumber={() => openContact(phoneInput, null, null, null)}
       />
 
       <section className="flex-1 rounded-lg border bg-[#0b141a]">

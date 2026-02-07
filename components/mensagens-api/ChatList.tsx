@@ -14,7 +14,7 @@ export function ChatList(props: {
   unreadByContact: Record<string, number>;
   formatPhone: (raw?: string | null) => string;
   formatChatTime: (iso?: string | null) => string;
-  onSelectChat: (contact: string, remoteJid?: string | null, name?: string | null) => void;
+  onSelectChat: (contact: string, remoteJid?: string | null, name?: string | null, avatarUrl?: string | null) => void;
   phoneInput: string;
   onPhoneInputChange: (value: string) => void;
   onOpenNumber: () => void;
@@ -74,7 +74,7 @@ export function ChatList(props: {
             {props.filteredChats.map((chat) => (
               <li key={`${chat.id}-${chat.contact}`}>
                 <button
-                  onClick={() => props.onSelectChat(chat.contact, chat.remoteJid ?? null, chat.name ?? null)}
+                  onClick={() => props.onSelectChat(chat.contact, chat.remoteJid ?? null, chat.name ?? null, chat.avatarUrl ?? null)}
                   className={[
                     'flex w-full items-center gap-3 overflow-hidden px-4 py-3 text-left transition',
                     props.selectedContact === chat.contact ? 'bg-gray-50' : 'hover:bg-gray-50'
