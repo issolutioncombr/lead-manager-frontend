@@ -290,7 +290,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
         if (!jid) continue;
         try {
           const resp = await api.get<{ profilePicUrl: string | null }>('/integrations/evolution/messages/profile-pic', {
-            params: { jid, instanceId: instanceId || undefined }
+            params: { jid, instanceId: instanceId || chat.originInstanceId || undefined }
           });
           const url = resp.data.profilePicUrl ?? null;
           chatAvatarCacheRef.current[jid] = url;
@@ -410,7 +410,6 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
       const originIds = new Set<string>();
       const originLabels: string[] = [];
       for (const m of data as any[]) {
-        if (!(m?.direction === 'OUTBOUND' || m?.fromMe)) continue;
         const id = String(m?.originInstanceId ?? '').trim();
         if (id) originIds.add(id);
         const lbl = String(m?.originNumber ?? m?.originInstanceId ?? '').trim();
@@ -528,7 +527,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
         const resp = await api.get<{ profilePicUrl: string | null }>('/integrations/evolution/messages/profile-pic', {
           params: {
             jid: (remoteJid ?? '').trim() || `${n}@s.whatsapp.net`,
-            instanceId: instanceId || undefined
+            instanceId: instanceId || originInstanceId || undefined
           }
         });
         setSelectedAvatarUrl(resp.data.profilePicUrl ?? avatarUrl ?? null);
