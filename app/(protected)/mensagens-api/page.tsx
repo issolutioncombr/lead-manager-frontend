@@ -21,6 +21,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [selectedAvatarUrl, setSelectedAvatarUrl] = useState<string | null>(null);
   const [selectedOriginLabel, setSelectedOriginLabel] = useState<string | null>(null);
+  const [selectedOriginInstanceId, setSelectedOriginInstanceId] = useState<string | null>(null);
    const [messages, setMessages] = useState<Message[]>([]);
    const [isLoadingChats, setIsLoadingChats] = useState(false);
    const [isLoadingMessages, setIsLoadingMessages] = useState(false);
@@ -45,6 +46,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
   const conversationLimitRef = useRef<number>(50);
   const selectedContactRef = useRef<string | null>(null);
   const selectedRemoteJidRef = useRef<string | null>(null);
+  const selectedOriginInstanceIdRef = useRef<string | null>(null);
   const conversationRequestSeqRef = useRef(0);
   const messagesRef = useRef<Message[]>([]);
   const lastCursorRef = useRef<{ lastTimestamp: string; lastUpdatedAt: string }>({
@@ -169,7 +171,8 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
       phone: `+${phone}`,
       afterTimestamp: cursor.lastTimestamp,
       afterUpdatedAt: cursor.lastUpdatedAt,
-      limit: '200'
+      limit: '200',
+      instanceId: (instanceId || selectedOriginInstanceIdRef.current || '') as any
     });
 
     const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
@@ -226,7 +229,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
       }
     }
     setStreamConnected(false);
-  }, [applyIncomingMessages, buildApiUrl]);
+  }, [applyIncomingMessages, buildApiUrl, instanceId]);
  
    useEffect(() => {
      const loadInstances = async () => {
@@ -346,7 +349,8 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
      if (!phone || phone.length < 7) return;
      try {
        const params: Record<string, any> = { phone };
-       if (instanceId) params.instanceId = instanceId;
+       const effectiveInstanceId = instanceId || selectedOriginInstanceIdRef.current || '';
+       if (effectiveInstanceId) params.instanceId = effectiveInstanceId;
         if (remoteJid) params.remoteJid = remoteJid;
        if (directionFilter !== 'all') params.direction = directionFilter;
       params.limit = limit;
@@ -529,8 +533,10 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
       selectedContactRef.current = n;
       setSelectedName((name ?? '').trim() ? (name ?? null) : null);
       if (!instanceId) {
+        setSelectedOriginInstanceId((originInstanceId ?? null) as any);
         setSelectedOriginLabel((originNumber ?? originLabel ?? originInstanceId ?? 'todas instâncias') as any);
       } else {
+        setSelectedOriginInstanceId(instanceId);
         const match = instances.find((i) => i.id === instanceId);
         setSelectedOriginLabel((match?.name ?? instanceId) as any);
       }
@@ -573,6 +579,10 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
   }, [selectedContact]);
 
   useEffect(() => {
+    selectedOriginInstanceIdRef.current = selectedOriginInstanceId;
+  }, [selectedOriginInstanceId]);
+
+  useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
 
@@ -587,6 +597,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
     if (instanceId) {
       const match = instances.find((i) => i.id === instanceId);
       setSelectedOriginLabel((match?.name ?? instanceId) as any);
+      setSelectedOriginInstanceId(instanceId);
     }
     lastMessageIdRef.current = null;
     lastCursorRef.current = { lastTimestamp: new Date(0).toISOString(), lastUpdatedAt: new Date(0).toISOString() };
@@ -709,6 +720,8 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
             afterTimestamp: cursor.lastTimestamp,
             afterUpdatedAt: cursor.lastUpdatedAt
           };
+          const effectiveInstanceId = instanceId || selectedOriginInstanceIdRef.current || '';
+          if (effectiveInstanceId) params.instanceId = effectiveInstanceId;
           const resp = await api.get<{ data: Message[]; cursor?: { lastTimestamp?: string; lastUpdatedAt?: string } }>(
             '/integrations/evolution/messages/updates',
             { params }
