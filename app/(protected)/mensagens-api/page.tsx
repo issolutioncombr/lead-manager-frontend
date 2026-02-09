@@ -280,7 +280,14 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
   useEffect(() => {
     const seq = ++chatsAvatarSeqRef.current;
     const targets = chats
-      .filter((c) => !c.avatarUrl && !!c.remoteJid && !Object.prototype.hasOwnProperty.call(chatAvatarCacheRef.current, String(c.remoteJid)))
+      .filter((c) => {
+        if (c.avatarUrl) return false;
+        const jid = String(c.remoteJid ?? '').trim();
+        if (!jid) return false;
+        const inst = String(instanceId || c.originInstanceId || '').trim();
+        const key = `${inst}|${jid}`;
+        return !Object.prototype.hasOwnProperty.call(chatAvatarCacheRef.current, key);
+      })
       .slice(0, 30);
     if (!targets.length) return;
     void (async () => {
@@ -288,21 +295,39 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
         if (seq !== chatsAvatarSeqRef.current) return;
         const jid = String(chat.remoteJid ?? '').trim();
         if (!jid) continue;
+        const inst = String(instanceId || chat.originInstanceId || '').trim();
+        const cacheKey = `${inst}|${jid}`;
         try {
           const resp = await api.get<{ profilePicUrl: string | null }>('/integrations/evolution/messages/profile-pic', {
             params: { jid, instanceId: instanceId || chat.originInstanceId || undefined }
           });
           const url = resp.data.profilePicUrl ?? null;
-          chatAvatarCacheRef.current[jid] = url;
+          chatAvatarCacheRef.current[cacheKey] = url;
           if (url) {
             setChats((curr) => curr.map((c) => (c.remoteJid === jid ? { ...c, avatarUrl: url } : c)));
           }
         } catch {
-          chatAvatarCacheRef.current[jid] = null;
+          chatAvatarCacheRef.current[cacheKey] = null;
         }
       }
     })();
   }, [chats, instanceId]);
+
+  useEffect(() => {
+    if (!selectedContact) return;
+    if (!instanceId) return;
+    const n = selectedContact.replace(/\D+/g, '');
+    if (!n) return;
+    const jid = (selectedRemoteJidRef.current ?? '').trim() || `${n}@s.whatsapp.net`;
+    void (async () => {
+      try {
+        const resp = await api.get<{ profilePicUrl: string | null }>('/integrations/evolution/messages/profile-pic', {
+          params: { jid, instanceId }
+        });
+        setSelectedAvatarUrl(resp.data.profilePicUrl ?? null);
+      } catch {}
+    })();
+  }, [instanceId, selectedContact]);
  
    const filteredChats = useMemo(() => {
      const q = chatSearch.trim().toLowerCase();
