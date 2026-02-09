@@ -2,6 +2,7 @@ export function ChatHeader(props: {
   selectedContact: string | null;
   selectedName?: string | null;
   avatarUrl?: string | null;
+  originLabel?: string | null;
   normalizedPhone: string;
   formatPhone: (raw?: string | null) => string;
   realtimeMode: 'stream' | 'poll';
@@ -12,7 +13,8 @@ export function ChatHeader(props: {
 }) {
   const phoneDisplay = props.selectedContact ? props.formatPhone(props.selectedContact) : null;
   const title = props.selectedContact ? (props.selectedName || phoneDisplay || `+${props.normalizedPhone}`) : 'Selecione uma conversa';
-  const subtitle = props.selectedContact ? (phoneDisplay ? `${phoneDisplay} • +${props.normalizedPhone}` : `+${props.normalizedPhone}`) : '—';
+  const originDisplay = props.selectedContact ? (props.originLabel ? props.formatPhone(props.originLabel) : 'unknown') : null;
+  const subtitle = props.selectedContact ? `Origem: ${originDisplay} • Destino: ${phoneDisplay ?? `+${props.normalizedPhone}`}` : '—';
   const avatarLetter = (props.selectedName || phoneDisplay || 'C').trim()[0] ?? 'C';
   const badge = props.realtimeMode === 'stream' ? (props.streamConnected ? 'Tempo real' : 'Conectando') : 'Polling';
 

@@ -12,6 +12,9 @@ export type Message = {
   updatedAt?: string;
   pushName?: string | null;
   phoneRaw?: string | null;
+  originInstanceId?: string | null;
+  originNumber?: string | null;
+  originProfilePicUrl?: string | null;
 };
 
 export type ChatItem = {
@@ -20,6 +23,10 @@ export type ChatItem = {
   contact: string;
   remoteJid?: string | null;
   avatarUrl?: string | null;
+  originInstanceId?: string | null;
+  originNumber?: string | null;
+  originProfilePicUrl?: string | null;
+  originLabel?: string | null;
   lastMessage?: { text: string; timestamp: string; fromMe: boolean } | null;
 };
 

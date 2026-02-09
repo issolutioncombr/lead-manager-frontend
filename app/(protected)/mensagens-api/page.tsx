@@ -20,6 +20,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
    const [selectedContact, setSelectedContact] = useState<string | null>(null);
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [selectedAvatarUrl, setSelectedAvatarUrl] = useState<string | null>(null);
+  const [selectedOriginLabel, setSelectedOriginLabel] = useState<string | null>(null);
    const [messages, setMessages] = useState<Message[]>([]);
    const [isLoadingChats, setIsLoadingChats] = useState(false);
    const [isLoadingMessages, setIsLoadingMessages] = useState(false);
@@ -405,6 +406,23 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
       };
     }
 
+    if (!instanceId) {
+      const originIds = new Set<string>();
+      const originLabels: string[] = [];
+      for (const m of data as any[]) {
+        if (!(m?.direction === 'OUTBOUND' || m?.fromMe)) continue;
+        const id = String(m?.originInstanceId ?? '').trim();
+        if (id) originIds.add(id);
+        const lbl = String(m?.originNumber ?? m?.originInstanceId ?? '').trim();
+        if (lbl) originLabels.push(lbl);
+      }
+      if (originIds.size > 1) {
+        setSelectedOriginLabel('múltiplas');
+      } else if (originIds.size === 1) {
+        setSelectedOriginLabel(originLabels[0] ?? Array.from(originIds)[0] ?? 'unknown');
+      }
+    }
+
     requestAnimationFrame(() => {
       const target = messagesContainerRef.current;
       if (!target) return;
@@ -466,7 +484,15 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
   }, [getConversation, mergeMessages, preferLocal]);
 
   const openContact = useCallback(
-    async (contact: string, remoteJid?: string | null, name?: string | null, avatarUrl?: string | null) => {
+    async (
+      contact: string,
+      remoteJid?: string | null,
+      name?: string | null,
+      avatarUrl?: string | null,
+      originInstanceId?: string | null,
+      originNumber?: string | null,
+      originLabel?: string | null
+    ) => {
       const n = (contact ?? '').replace(/\D+/g, '');
       if (!n) return;
       if (n.length < 7 || n.length > 15) {
@@ -478,6 +504,12 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
       setSelectedContact(n);
       selectedContactRef.current = n;
       setSelectedName((name ?? '').trim() ? (name ?? null) : null);
+      if (!instanceId) {
+        setSelectedOriginLabel((originNumber ?? originLabel ?? originInstanceId ?? 'todas instâncias') as any);
+      } else {
+        const match = instances.find((i) => i.id === instanceId);
+        setSelectedOriginLabel((match?.name ?? instanceId) as any);
+      }
       setMessages([]);
       setConversationLimit(50);
       setIsLoadingOlder(false);
@@ -505,7 +537,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
       }
       await applyConversation(n, 50, { allowRetryLocal: true, remoteJid: remoteJid ?? null });
     },
-    [applyConversation, instanceId]
+    [applyConversation, instanceId, instances]
   );
 
   useEffect(() => {
@@ -528,10 +560,14 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
     setIsLoadingOlder(false);
     isLoadingOlderRef.current = false;
     conversationPagingRef.current = { hasMore: false, nextCursor: null };
+    if (instanceId) {
+      const match = instances.find((i) => i.id === instanceId);
+      setSelectedOriginLabel((match?.name ?? instanceId) as any);
+    }
     lastMessageIdRef.current = null;
     lastCursorRef.current = { lastTimestamp: new Date(0).toISOString(), lastUpdatedAt: new Date(0).toISOString() };
     void applyConversation(c, 50, { allowRetryLocal: true, remoteJid: selectedRemoteJidRef.current });
-  }, [applyConversation, directionFilter, instanceId]);
+  }, [applyConversation, directionFilter, instanceId, instances]);
  
    useEffect(() => {
      const phoneParam = searchParams.get('phone');
@@ -766,6 +802,8 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
     const match = instances.find((i) => i.id === instanceId);
     return match?.profilePicUrl ?? null;
   }, [instanceId, instances]);
+
+  const headerOriginLabel = instanceId ? outgoingLabel : selectedOriginLabel;
  
   return (
     <div className="flex h-[calc(100vh-100px)] gap-4">
@@ -783,10 +821,12 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
         unreadByContact={unreadByContact}
         formatPhone={formatPhone}
         formatChatTime={formatChatTime}
-        onSelectChat={(contact, remoteJid, name, avatarUrl) => void openContact(contact, remoteJid, name, avatarUrl)}
+        onSelectChat={(contact, remoteJid, name, avatarUrl, originInstanceId, originNumber, originLabel) =>
+          void openContact(contact, remoteJid, name, avatarUrl, originInstanceId, originNumber, originLabel)
+        }
         phoneInput={phoneInput}
         onPhoneInputChange={setPhoneInput}
-        onOpenNumber={() => openContact(phoneInput, null, null, null)}
+        onOpenNumber={() => openContact(phoneInput, null, null, null, null, null, null)}
       />
 
       <section className="flex-1 rounded-lg border bg-[#0b141a]">
@@ -794,6 +834,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
           selectedContact={selectedContact}
           selectedName={selectedName}
           avatarUrl={selectedAvatarUrl}
+          originLabel={headerOriginLabel}
           normalizedPhone={normalizedPhone}
           formatPhone={formatPhone}
           realtimeMode={realtimeMode}

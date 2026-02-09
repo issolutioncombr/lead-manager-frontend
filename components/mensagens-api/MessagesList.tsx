@@ -55,6 +55,8 @@ export function MessagesList(props: {
           }
           const msg = it.msg;
           const isMine = msg.direction === 'OUTBOUND' || !!msg.fromMe;
+          const outboundAvatarUrl = msg.originProfilePicUrl ?? props.outgoingAvatarUrl ?? null;
+          const outboundLabel = msg.originNumber ?? props.outgoingLabel ?? 'CRM';
           return (
             <div key={it.id} className={`mb-2 flex ${isMine ? 'justify-end' : 'justify-start'}`}>
               {!isMine && (
@@ -95,10 +97,10 @@ export function MessagesList(props: {
               </div>
               {isMine && (
                 <div className="ml-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs text-white">
-                  {props.outgoingAvatarUrl ? (
-                    <img src={props.outgoingAvatarUrl} alt="" className="h-full w-full rounded-full object-cover" />
+                  {outboundAvatarUrl ? (
+                    <img src={outboundAvatarUrl} alt="" className="h-full w-full rounded-full object-cover" />
                   ) : (
-                    avatarLetter(outLabel)
+                    avatarLetter(outboundLabel)
                   )}
                 </div>
               )}

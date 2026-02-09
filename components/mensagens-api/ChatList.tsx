@@ -14,11 +14,27 @@ export function ChatList(props: {
   unreadByContact: Record<string, number>;
   formatPhone: (raw?: string | null) => string;
   formatChatTime: (iso?: string | null) => string;
-  onSelectChat: (contact: string, remoteJid?: string | null, name?: string | null, avatarUrl?: string | null) => void;
+  onSelectChat: (
+    contact: string,
+    remoteJid?: string | null,
+    name?: string | null,
+    avatarUrl?: string | null,
+    originInstanceId?: string | null,
+    originNumber?: string | null,
+    originLabel?: string | null
+  ) => void;
   phoneInput: string;
   onPhoneInputChange: (value: string) => void;
   onOpenNumber: () => void;
 }) {
+  const getOriginLabel = (chat: ChatItem) => {
+    if (props.instanceId) {
+      const selected = props.instances.find((i) => i.id === props.instanceId);
+      return selected?.name ?? props.instanceId;
+    }
+    return chat.originNumber ?? chat.originLabel ?? (chat.originInstanceId ? String(chat.originInstanceId) : 'unknown');
+  };
+
   return (
     <aside className="w-80 shrink-0 rounded-lg border bg-white">
       <div className="border-b px-4 py-3">
@@ -74,7 +90,17 @@ export function ChatList(props: {
             {props.filteredChats.map((chat) => (
               <li key={`${chat.id}-${chat.contact}`}>
                 <button
-                  onClick={() => props.onSelectChat(chat.contact, chat.remoteJid ?? null, chat.name ?? null, chat.avatarUrl ?? null)}
+                  onClick={() =>
+                    props.onSelectChat(
+                      chat.contact,
+                      chat.remoteJid ?? null,
+                      chat.name ?? null,
+                      chat.avatarUrl ?? null,
+                      chat.originInstanceId ?? null,
+                      chat.originNumber ?? null,
+                      chat.originLabel ?? null
+                    )
+                  }
                   className={[
                     'flex w-full items-center gap-3 overflow-hidden px-4 py-3 text-left transition',
                     props.selectedContact === chat.contact ? 'bg-gray-50' : 'hover:bg-gray-50'
@@ -97,7 +123,9 @@ export function ChatList(props: {
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <p className="truncate text-xs text-gray-500">{props.formatPhone(chat.contact)}</p>
+                      <p className="truncate text-xs text-gray-500">
+                        Origem: {props.formatPhone(getOriginLabel(chat))} • Destino: {props.formatPhone(chat.contact)}
+                      </p>
                       {!!props.unreadByContact[chat.contact] && (
                         <span className="ml-auto rounded-full bg-green-500 px-2 py-0.5 text-[10px] font-semibold text-white">
                           {props.unreadByContact[chat.contact]}
