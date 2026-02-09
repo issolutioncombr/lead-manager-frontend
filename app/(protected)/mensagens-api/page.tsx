@@ -26,6 +26,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
   const [error, setError] = useState<string | null>(null);
   const [preferLocal, setPreferLocal] = useState(false);
   const [conversationLimit, setConversationLimit] = useState<number>(50);
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const [hasNewMessages, setHasNewMessages] = useState(false);
   const [unreadByContact, setUnreadByContact] = useState<Record<string, number>>({});
   const [streamConnected, setStreamConnected] = useState(false);
@@ -49,6 +50,10 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
     lastTimestamp: new Date(0).toISOString(),
     lastUpdatedAt: new Date(0).toISOString()
   });
+  const conversationPagingRef = useRef<{ hasMore: boolean; nextCursor: string | null }>({ hasMore: false, nextCursor: null });
+  const isLoadingOlderRef = useRef(false);
+  const chatsAvatarSeqRef = useRef(0);
+  const chatAvatarCacheRef = useRef<Record<string, string | null>>({});
  
    const normalizedPhone = useMemo(() => (selectedContact ?? '').replace(/\D+/g, ''), [selectedContact]);
  
@@ -270,6 +275,33 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
    useEffect(() => {
     void loadChats();
   }, [loadChats]);
+
+  useEffect(() => {
+    const seq = ++chatsAvatarSeqRef.current;
+    const targets = chats
+      .filter((c) => !c.avatarUrl && !!c.remoteJid && !Object.prototype.hasOwnProperty.call(chatAvatarCacheRef.current, String(c.remoteJid)))
+      .slice(0, 30);
+    if (!targets.length) return;
+    void (async () => {
+      for (const chat of targets) {
+        if (seq !== chatsAvatarSeqRef.current) return;
+        const jid = String(chat.remoteJid ?? '').trim();
+        if (!jid) continue;
+        try {
+          const resp = await api.get<{ profilePicUrl: string | null }>('/integrations/evolution/messages/profile-pic', {
+            params: { jid, instanceId: instanceId || undefined }
+          });
+          const url = resp.data.profilePicUrl ?? null;
+          chatAvatarCacheRef.current[jid] = url;
+          if (url) {
+            setChats((curr) => curr.map((c) => (c.remoteJid === jid ? { ...c, avatarUrl: url } : c)));
+          }
+        } catch {
+          chatAvatarCacheRef.current[jid] = null;
+        }
+      }
+    })();
+  }, [chats, instanceId]);
  
    const filteredChats = useMemo(() => {
      const q = chatSearch.trim().toLowerCase();
@@ -277,7 +309,13 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
      return chats.filter((c) => (c.name ?? '').toLowerCase().includes(q) || c.contact.includes(q));
    }, [chats, chatSearch]);
  
-  const getConversation = useCallback(async (contact: string, limit: number, remoteJid?: string | null, sourceOverride?: 'provider' | 'local') => {
+  const getConversation = useCallback(async (
+    contact: string,
+    limit: number,
+    remoteJid?: string | null,
+    sourceOverride?: 'provider' | 'local',
+    cursorOpts?: { beforeTimestamp?: string; beforeUpdatedAt?: string; cursor?: string }
+  ) => {
      const phone = contact.replace(/\D+/g, '');
      if (!phone || phone.length < 7) return;
      try {
@@ -286,11 +324,14 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
         if (remoteJid) params.remoteJid = remoteJid;
        if (directionFilter !== 'all') params.direction = directionFilter;
       params.limit = limit;
-      const resp = await api.get<{ data: Message[] }>(
+      if (cursorOpts?.beforeTimestamp) params.beforeTimestamp = cursorOpts.beforeTimestamp;
+      if (cursorOpts?.beforeUpdatedAt) params.beforeUpdatedAt = cursorOpts.beforeUpdatedAt;
+      if (cursorOpts?.cursor) params.cursor = cursorOpts.cursor;
+      const resp = await api.get<{ data: Message[]; hasMore?: boolean; nextCursor?: string | null }>(
          '/integrations/evolution/messages/conversation',
         { params: { ...params, source: sourceOverride ?? (preferLocal ? 'local' : 'provider') } }
        );
-      return resp.data.data;
+      return resp.data;
      } catch (e) {
        const status = (e as any)?.response?.status;
       setError(`Não foi possível carregar a conversa${status ? ` (código ${status})` : ''}.`);
@@ -306,11 +347,12 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
 
     setIsLoadingMessages(true);
     setError(null);
-    let data = await getConversation(contact, limit, opts?.remoteJid ?? null);
-    if (!Array.isArray(data) && !preferLocal && opts?.allowRetryLocal !== false) {
+    let resp = await getConversation(contact, limit, opts?.remoteJid ?? null);
+    if (!resp?.data && !preferLocal && opts?.allowRetryLocal !== false) {
       setPreferLocal(true);
-      data = await getConversation(contact, limit, opts?.remoteJid ?? null, 'local');
+      resp = await getConversation(contact, limit, opts?.remoteJid ?? null, 'local');
     }
+    const data = Array.isArray(resp?.data) ? resp?.data : null;
     if (!Array.isArray(data)) {
       setIsLoadingMessages(false);
       return;
@@ -319,6 +361,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
       setIsLoadingMessages(false);
       return;
     }
+    conversationPagingRef.current = { hasMore: !!resp?.hasMore, nextCursor: resp?.nextCursor ?? null };
     setMessages((curr) => {
       if (!data.length) return curr;
       const phone = contact.replace(/\D+/g, '');
@@ -379,6 +422,49 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
     setIsLoadingMessages(false);
   }, [directionFilter, getConversation, mergeMessages, preferLocal, scrollToBottom]);
 
+  const loadOlderMessages = useCallback(async () => {
+    const contact = selectedContactRef.current;
+    const remoteJid = selectedRemoteJidRef.current;
+    if (!contact) return;
+    if (isLoadingOlderRef.current) return;
+    const paging = conversationPagingRef.current;
+    if (!paging.hasMore || !paging.nextCursor) return;
+    const el = messagesContainerRef.current;
+    const prevScrollHeight = el?.scrollHeight ?? 0;
+    const prevScrollTop = el?.scrollTop ?? 0;
+    isLoadingOlderRef.current = true;
+    setIsLoadingOlder(true);
+    try {
+      const rawCursor = paging.nextCursor;
+      const cursorAsDate = rawCursor ? new Date(rawCursor) : null;
+      const isIsoCursor = !!rawCursor && !!cursorAsDate && !Number.isNaN(cursorAsDate.getTime()) && rawCursor.includes('-');
+      const cursorParams = isIsoCursor
+        ? { beforeTimestamp: rawCursor!, beforeUpdatedAt: rawCursor! }
+        : { cursor: rawCursor! };
+      let resp = await getConversation(contact, conversationLimitRef.current, remoteJid ?? null, undefined, cursorParams);
+      if (!resp?.data && !preferLocal) {
+        setPreferLocal(true);
+        resp = await getConversation(contact, conversationLimitRef.current, remoteJid ?? null, 'local', cursorParams);
+      }
+      const older = Array.isArray(resp?.data) ? resp.data : [];
+      if (!older.length) {
+        conversationPagingRef.current = { hasMore: false, nextCursor: null };
+        return;
+      }
+      conversationPagingRef.current = { hasMore: !!resp?.hasMore, nextCursor: resp?.nextCursor ?? null };
+      setMessages((curr) => mergeMessages(curr, older));
+      requestAnimationFrame(() => {
+        const target = messagesContainerRef.current;
+        if (!target) return;
+        const newScrollHeight = target.scrollHeight;
+        target.scrollTop = prevScrollTop + (newScrollHeight - prevScrollHeight);
+      });
+    } finally {
+      isLoadingOlderRef.current = false;
+      setIsLoadingOlder(false);
+    }
+  }, [getConversation, mergeMessages, preferLocal]);
+
   const openContact = useCallback(
     async (contact: string, remoteJid?: string | null, name?: string | null, avatarUrl?: string | null) => {
       const n = (contact ?? '').replace(/\D+/g, '');
@@ -394,6 +480,9 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
       setSelectedName((name ?? '').trim() ? (name ?? null) : null);
       setMessages([]);
       setConversationLimit(50);
+      setIsLoadingOlder(false);
+      isLoadingOlderRef.current = false;
+      conversationPagingRef.current = { hasMore: false, nextCursor: null };
       setHasNewMessages(false);
       lastMessageIdRef.current = null;
       lastCursorRef.current = { lastTimestamp: new Date(0).toISOString(), lastUpdatedAt: new Date(0).toISOString() };
@@ -436,6 +525,9 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
     if (!c) return;
     setMessages([]);
     setConversationLimit(50);
+    setIsLoadingOlder(false);
+    isLoadingOlderRef.current = false;
+    conversationPagingRef.current = { hasMore: false, nextCursor: null };
     lastMessageIdRef.current = null;
     lastCursorRef.current = { lastTimestamp: new Date(0).toISOString(), lastUpdatedAt: new Date(0).toISOString() };
     void applyConversation(c, 50, { allowRetryLocal: true, remoteJid: selectedRemoteJidRef.current });
@@ -593,14 +685,10 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     isAtBottomRef.current = distanceFromBottom < 80;
 
-    if (el.scrollTop < 60 && !isLoadingMessages && conversationLimit < 200 && selectedContact) {
-      const next = Math.min(200, conversationLimit + 50);
-      if (next !== conversationLimit) {
-        setConversationLimit(next);
-        void applyConversation(selectedContact, next, { preserveScroll: true, allowRetryLocal: true, remoteJid: selectedRemoteJidRef.current });
-      }
+    if (el.scrollTop < 60 && !isLoadingMessages && !isLoadingOlder && selectedContact) {
+      void loadOlderMessages();
     }
-  }, [applyConversation, conversationLimit, isLoadingMessages, selectedContact]);
+  }, [isLoadingMessages, isLoadingOlder, loadOlderMessages, selectedContact]);
  
    const formatPhone = (raw?: string | null) => {
      if (!raw) return '';
