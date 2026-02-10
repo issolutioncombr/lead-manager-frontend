@@ -23,6 +23,7 @@ type InstancePromptLinkItem = {
 };
 
 export default function AgentPromptPage() {
+  const maxStoredPromptLength = 100000;
   const router = useRouter();
   const { seller, loading: authLoading } = useAuth();
   const [instances, setInstances] = useState<Array<{ id: string; name: string }>>([]);
@@ -172,6 +173,16 @@ export default function AgentPromptPage() {
     setSuccessMessage(null);
   };
 
+  const errorMessageFromAxios = (err: any) => {
+    const status = err?.response?.status;
+    const data = err?.response?.data;
+    const msg = typeof data?.message === 'string' ? data.message : Array.isArray(data?.message) ? data.message.join(', ') : null;
+    if (msg && status) return `${msg} (HTTP ${status})`;
+    if (msg) return msg;
+    if (status) return `Falha na requisição (HTTP ${status}).`;
+    return 'Falha na requisição.';
+  };
+
   const savePrompt = async (event: FormEvent) => {
     event.preventDefault();
     if (isSavingLibrary) return;
@@ -179,6 +190,10 @@ export default function AgentPromptPage() {
     setError(null);
     setSuccessMessage(null);
     try {
+      if (promptText.trim().length > maxStoredPromptLength) {
+        setError(`Prompt muito grande (máx. ${maxStoredPromptLength} caracteres).`);
+        return;
+      }
       if (editingPromptId) {
         const resp = await api.put<{ data: PromptItem }>(`/agent-prompt/prompts/${encodeURIComponent(editingPromptId)}`, {
           name: promptName,
@@ -199,7 +214,7 @@ export default function AgentPromptPage() {
       }
     } catch (err) {
       console.error(err);
-      setError('Nao foi possivel salvar o prompt.');
+      setError(errorMessageFromAxios(err));
     } finally {
       setIsSavingLibrary(false);
     }
@@ -220,7 +235,7 @@ export default function AgentPromptPage() {
       setSuccessMessage('Prompt excluido com sucesso.');
     } catch (err) {
       console.error(err);
-      setError('Nao foi possivel excluir o prompt.');
+      setError(errorMessageFromAxios(err));
     } finally {
       setIsDeletingPromptId(null);
     }
@@ -258,7 +273,7 @@ export default function AgentPromptPage() {
       setSuccessMessage('Vinculos salvos com sucesso.');
     } catch (err) {
       console.error(err);
-      setError('Nao foi possivel salvar os vinculos.');
+      setError(errorMessageFromAxios(err));
     } finally {
       setIsSavingLinks(false);
     }
@@ -487,10 +502,12 @@ export default function AgentPromptPage() {
               />
             </label>
             <div className="flex items-center justify-between text-sm text-gray-500">
-              <span>{promptText.length} caracteres</span>
+              <span>
+                {promptText.length} / {maxStoredPromptLength} caracteres
+              </span>
               <button
                 type="submit"
-                disabled={isSavingLibrary || !promptText.trim()}
+                disabled={isSavingLibrary || !promptText.trim() || promptText.trim().length > maxStoredPromptLength}
                 className="rounded-lg bg-slate-900 px-4 py-2 font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
               >
                 {isSavingLibrary ? 'Salvando...' : 'Salvar'}
