@@ -466,7 +466,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
     });
 
     setIsLoadingMessages(false);
-  }, [directionFilter, getConversation, mergeMessages, preferLocal, scrollToBottom]);
+  }, [directionFilter, getConversation, instanceId, mergeMessages, preferLocal, scrollToBottom]);
 
   const loadOlderMessages = useCallback(async () => {
     const contact = selectedContactRef.current;
@@ -749,7 +749,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
     return () => {
       window.clearInterval(id);
     };
-  }, [applyIncomingMessages, realtimeMode, selectedContact, streamConnected]);
+  }, [applyIncomingMessages, instanceId, realtimeMode, selectedContact, streamConnected]);
 
   const handleMessagesScroll = useCallback(() => {
     const el = messagesContainerRef.current;
