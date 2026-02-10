@@ -20,24 +20,34 @@ type IconName =
   | 'sparkles'
   | 'clock';
 
-type LinkItem = { href: string; label: string; icon: IconName };
+type LinkItem = { type: 'link'; href: string; label: string; icon: IconName };
+type GroupItem = { type: 'group'; label: string; icon: IconName; children: Array<{ href: string; label: string }> };
+type NavItem = LinkItem | GroupItem;
 
-const links: LinkItem[] = [
-  { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
+const links: NavItem[] = [
+  { type: 'link', href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
   // { href: '/clients', label: 'Clientes', icon: 'users' },
   // { href: '/alunos', label: 'Alunos', icon: 'users' },
-  { href: '/leads', label: 'Leads', icon: 'funnel' },
-  { href: '/conversations', label: 'Conversas', icon: 'users' },
-  { href: '/mensagens-api', label: 'Mensagens API', icon: 'users' },
-  { href: '/bot-controls', label: 'Botões e Webhooks', icon: 'sparkles' },
-  { href: '/sellers', label: 'Vendedores', icon: 'users' },
+  { type: 'link', href: '/leads', label: 'Leads', icon: 'funnel' },
+  { type: 'link', href: '/conversations', label: 'Conversas', icon: 'users' },
+  { type: 'link', href: '/mensagens-api', label: 'Mensagens API', icon: 'users' },
+  { type: 'link', href: '/bot-controls', label: 'Botões e Webhooks', icon: 'sparkles' },
+  { type: 'link', href: '/sellers', label: 'Vendedores', icon: 'users' },
   // { href: '/course-leads', label: 'Leads Curso', icon: 'funnel' },
-  { href: '/appointments', label: 'Video Chamadas', icon: 'calendar' },
+  { type: 'link', href: '/appointments', label: 'Video Chamadas', icon: 'calendar' },
   // { href: '/campaigns', label: 'Campanhas', icon: 'megaphone' },
-  { href: '/integrations', label: 'Integrações', icon: 'puzzle' },
-  { href: '/agent-prompt', label: 'Prompt do agente', icon: 'sparkles' },
-  { href: '/bot-actions', label: 'Acionar Botões', icon: 'clock' },
-  { href: '/reports', label: 'Relatórios', icon: 'chart' }
+  { type: 'link', href: '/integrations', label: 'Integrações', icon: 'puzzle' },
+  {
+    type: 'group',
+    label: 'Prompt do agente',
+    icon: 'sparkles',
+    children: [
+      { href: '/agent-prompt', label: 'Configuração' },
+      { href: '/agent-prompt/reports', label: 'Relatórios Prompt' }
+    ]
+  },
+  { type: 'link', href: '/bot-actions', label: 'Acionar Botões', icon: 'clock' },
+  { type: 'link', href: '/reports', label: 'Relatórios', icon: 'chart' }
 ];
 
 function Icon({ name, className }: { name: IconName; className?: string }) {
@@ -145,26 +155,32 @@ export const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const navigationLinks = useMemo(() => {
-    const baseLinks = links.filter(
-      (link) => !(seller && (link.href === '/sellers' || link.href === '/agent-prompt'))
-    );
+    const baseLinks = links.filter((item) => {
+      if (!seller) return true;
+      if (item.type === 'link') return !(item.href === '/sellers');
+      if (item.type === 'group') return item.label !== 'Prompt do agente';
+      return true;
+    });
     const attendanceLink: LinkItem = {
+      type: 'link',
       href: '/attendance',
       label: seller ? 'Atendimento' : 'Agenda dos vendedores',
       icon: 'clock'
     };
-    const insertIndex = baseLinks.findIndex((link) => link.href === '/appointments');
+    const insertIndex = baseLinks.findIndex((item) => item.type === 'link' && item.href === '/appointments');
     if (insertIndex >= 0) {
       baseLinks.splice(insertIndex + 1, 0, attendanceLink);
     } else {
       baseLinks.push(attendanceLink);
     }
     if (user?.isAdmin || user?.role === 'admin') {
-      baseLinks.splice(1, 0, { href: '/approvals', label: 'Aprovações', icon: 'users' });
-      baseLinks.splice(2, 0, { href: '/users', label: 'Usuários', icon: 'users' });
+      baseLinks.splice(1, 0, { type: 'link', href: '/approvals', label: 'Aprovações', icon: 'users' });
+      baseLinks.splice(2, 0, { type: 'link', href: '/users', label: 'Usuários', icon: 'users' });
     }
     return baseLinks;
   }, [seller, user?.isAdmin, user?.role]);
+
+  const isGroupActive = (group: GroupItem) => group.children.some((c) => pathname.startsWith(c.href));
 
   const handleLogout = () => {
     if (isLoggingOut) return;
@@ -212,24 +228,59 @@ export const Navbar = () => {
           </div>
 
           <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-2 text-sm text-gray-700">
-            {navigationLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                onClick={() => setMobileOpen(false)}
-                className={clsx(
-                  'block rounded-md px-3 py-2 transition',
-                  pathname.startsWith(link.href)
-                    ? 'bg-primary/10 text-primary'
-                    : 'hover:bg-gray-100 hover:text-primary-dark'
-                )}
-              >
-                <span className="flex items-center gap-3">
-                  <Icon name={link.icon} className="h-5 w-5" />
-                  <span>{link.label}</span>
-                </span>
-              </Link>
-            ))}
+            {navigationLinks.map((item) => {
+              if (item.type === 'link') {
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMobileOpen(false)}
+                    className={clsx(
+                      'block rounded-md px-3 py-2 transition',
+                      pathname.startsWith(item.href)
+                        ? 'bg-primary/10 text-primary'
+                        : 'hover:bg-gray-100 hover:text-primary-dark'
+                    )}
+                  >
+                    <span className="flex items-center gap-3">
+                      <Icon name={item.icon} className="h-5 w-5" />
+                      <span>{item.label}</span>
+                    </span>
+                  </Link>
+                );
+              }
+              const active = isGroupActive(item);
+              return (
+                <div key={item.label} className="rounded-md">
+                  <div
+                    className={clsx(
+                      'flex items-center gap-3 rounded-md px-3 py-2',
+                      active ? 'bg-primary/10 text-primary' : 'text-gray-700'
+                    )}
+                  >
+                    <Icon name={item.icon} className="h-5 w-5" />
+                    <span className="font-semibold">{item.label}</span>
+                  </div>
+                  <div className="mt-1 space-y-1 pl-9">
+                    {item.children.map((c) => (
+                      <Link
+                        key={c.href}
+                        href={c.href}
+                        onClick={() => setMobileOpen(false)}
+                        className={clsx(
+                          'block rounded-md px-3 py-2 text-sm transition',
+                          pathname.startsWith(c.href)
+                            ? 'bg-primary/10 text-primary'
+                            : 'hover:bg-gray-100 hover:text-primary-dark'
+                        )}
+                      >
+                        {c.label}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </nav>
 
           <div className="mt-auto border-t px-4 py-4">
@@ -263,23 +314,57 @@ export const Navbar = () => {
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-2 text-sm text-gray-700">
-          {navigationLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className={clsx(
-                'block rounded-md px-3 py-2 transition',
-                pathname.startsWith(link.href)
-                  ? 'bg-primary/10 text-primary'
-                  : 'hover:bg-gray-100 hover:text-primary-dark'
-              )}
-            >
-              <span className="flex items-center gap-3">
-                <Icon name={link.icon} className="h-5 w-5" />
-                <span>{link.label}</span>
-              </span>
-            </Link>
-          ))}
+          {navigationLinks.map((item) => {
+            if (item.type === 'link') {
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={clsx(
+                    'block rounded-md px-3 py-2 transition',
+                    pathname.startsWith(item.href)
+                      ? 'bg-primary/10 text-primary'
+                      : 'hover:bg-gray-100 hover:text-primary-dark'
+                  )}
+                >
+                  <span className="flex items-center gap-3">
+                    <Icon name={item.icon} className="h-5 w-5" />
+                    <span>{item.label}</span>
+                  </span>
+                </Link>
+              );
+            }
+            const active = isGroupActive(item);
+            return (
+              <div key={item.label} className="rounded-md">
+                <div
+                  className={clsx(
+                    'flex items-center gap-3 rounded-md px-3 py-2',
+                    active ? 'bg-primary/10 text-primary' : 'text-gray-700'
+                  )}
+                >
+                  <Icon name={item.icon} className="h-5 w-5" />
+                  <span className="font-semibold">{item.label}</span>
+                </div>
+                <div className="mt-1 space-y-1 pl-9">
+                  {item.children.map((c) => (
+                    <Link
+                      key={c.href}
+                      href={c.href}
+                      className={clsx(
+                        'block rounded-md px-3 py-2 text-sm transition',
+                        pathname.startsWith(c.href)
+                          ? 'bg-primary/10 text-primary'
+                          : 'hover:bg-gray-100 hover:text-primary-dark'
+                      )}
+                    >
+                      {c.label}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </nav>
 
         <div className="mt-auto border-t px-4 py-4">
