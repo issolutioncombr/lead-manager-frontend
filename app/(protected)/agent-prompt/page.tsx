@@ -45,6 +45,7 @@ export default function AgentPromptPage() {
   const [isLoadingLinks, setIsLoadingLinks] = useState(true);
   const [isSavingLinks, setIsSavingLinks] = useState(false);
   const [addPromptId, setAddPromptId] = useState<string>('');
+  const [linksSaved, setLinksSaved] = useState(false);
 
   useEffect(() => {
     if (authLoading) {
@@ -133,12 +134,14 @@ export default function AgentPromptPage() {
             prompt: l.prompt
           }))
         );
+        setLinksSaved(true);
       })
       .catch((err) => {
         console.error(err);
         if (!isMounted) return;
         setError('Nao foi possivel carregar os vinculos da instancia.');
         setLinks([]);
+        setLinksSaved(false);
       })
       .finally(() => {
         if (!isMounted) return;
@@ -152,6 +155,24 @@ export default function AgentPromptPage() {
   const totalPercent = useMemo(() => links.reduce((acc, l) => acc + (l.active ? Number(l.percent || 0) : 0), 0), [links]);
   const canSaveLinks = links.length === 0 || Math.abs(totalPercent - 100) < 0.0001;
   const percentDelta = useMemo(() => 100 - totalPercent, [totalPercent]);
+  const fmtPercent = (v: number) => v.toFixed(2).replace(/\.00$/, '');
+
+  const redistributeActivePercents = (items: InstancePromptLinkItem[]) => {
+    const active = items.filter((l) => l.active !== false);
+    if (active.length <= 0) return items;
+    const base = Math.floor(10000 / active.length);
+    const remainder = 10000 - base * active.length;
+    const assigned = new Map<string, number>();
+    for (let i = 0; i < active.length; i += 1) {
+      const bps = base + (i < remainder ? 1 : 0);
+      assigned.set(active[i].promptId, bps);
+    }
+    return items.map((l) => {
+      if (l.active === false) return { ...l, percent: 0 };
+      const bps = assigned.get(l.promptId) ?? 0;
+      return { ...l, percent: Math.round((bps / 100) * 100) / 100 };
+    });
+  };
 
   const availableToAdd = useMemo(() => {
     const linked = new Set(links.map((l) => l.promptId));
@@ -245,7 +266,27 @@ export default function AgentPromptPage() {
     try {
       await api.delete(`/agent-prompt/prompts/${encodeURIComponent(id)}`);
       setLibrary((curr) => curr.filter((p) => p.id !== id));
-      setLinks((curr) => curr.filter((l) => l.promptId !== id));
+      if (selectedInstanceId) {
+        try {
+          const resp = await api.get(`/agent-prompt/instances/${encodeURIComponent(selectedInstanceId)}/prompts`);
+          const next = Array.isArray((resp.data as any).links) ? (resp.data as any).links : [];
+          setLinks(
+            next.map((l: any) => ({
+              promptId: l.promptId,
+              percent: Number(l.percent ?? 0),
+              active: l.active !== false,
+              prompt: l.prompt
+            }))
+          );
+          setLinksSaved(true);
+        } catch {
+          setLinks((curr) => curr.filter((l) => l.promptId !== id));
+          setLinksSaved(false);
+        }
+      } else {
+        setLinks((curr) => curr.filter((l) => l.promptId !== id));
+        setLinksSaved(false);
+      }
       if (editingPromptId === id) {
         startNewPrompt();
       }
@@ -264,6 +305,7 @@ export default function AgentPromptPage() {
     const p = library.find((x) => x.id === pid);
     if (!p) return;
     setLinks((curr) => [...curr, { promptId: p.id, percent: 0, active: true, prompt: p }]);
+    setLinksSaved(false);
     setAddPromptId('');
     setSuccessMessage(null);
     setError(null);
@@ -288,6 +330,7 @@ export default function AgentPromptPage() {
         }))
       });
       setSuccessMessage('Vinculos salvos com sucesso.');
+      setLinksSaved(true);
     } catch (err) {
       console.error(err);
       setError(errorMessageFromAxios(err));
@@ -376,10 +419,12 @@ export default function AgentPromptPage() {
             <span className={canSaveLinks ? 'font-semibold text-green-700' : 'font-semibold text-red-700'}>{totalPercent}%</span>
             {links.length > 0 && !canSaveLinks && (
               <span className="ml-2 text-xs text-red-700">
-                {percentDelta > 0 ? `Faltam ${percentDelta}% para chegar em 100%.` : `Excedeu ${Math.abs(percentDelta)}% (precisa ser 100%).`}
+                {percentDelta > 0 ? `Faltam ${fmtPercent(percentDelta)}% para chegar em 100%.` : `Excedeu ${fmtPercent(Math.abs(percentDelta))}% (precisa ser 100%).`}
               </span>
             )}
-            {links.length > 0 && canSaveLinks && <span className="ml-2 text-xs text-green-700">Pronto para salvar.</span>}
+            {links.length > 0 && canSaveLinks && (
+              <span className="ml-2 text-xs text-green-700">{linksSaved ? 'Salvo.' : 'Pronto para salvar.'}</span>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -411,6 +456,7 @@ export default function AgentPromptPage() {
                               : x
                           )
                         );
+                        setLinksSaved(false);
                         setError(null);
                         setSuccessMessage(null);
                       }}
@@ -424,6 +470,7 @@ export default function AgentPromptPage() {
                       checked={l.active !== false}
                       onChange={(e) => {
                         setLinks((curr) => curr.map((x) => (x.promptId === l.promptId ? { ...x, active: e.target.checked } : x)));
+                        setLinksSaved(false);
                         setError(null);
                         setSuccessMessage(null);
                       }}
@@ -434,7 +481,8 @@ export default function AgentPromptPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      setLinks((curr) => curr.filter((x) => x.promptId !== l.promptId));
+                      setLinks((curr) => redistributeActivePercents(curr.filter((x) => x.promptId !== l.promptId)));
+                      setLinksSaved(false);
                       setError(null);
                       setSuccessMessage(null);
                     }}
