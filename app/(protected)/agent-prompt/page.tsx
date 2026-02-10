@@ -158,6 +158,18 @@ export default function AgentPromptPage() {
     return library.filter((p) => p.active && !linked.has(p.id));
   }, [library, links]);
 
+  const duplicatePromptNameMessage = useMemo(() => {
+    const normalizedName = promptName.trim();
+    if (!normalizedName) return null;
+    const dup = library.find((p) => {
+      const pName = (p.name ?? '').trim();
+      if (!pName) return false;
+      if (editingPromptId && p.id === editingPromptId) return false;
+      return pName.toLowerCase() === normalizedName.toLowerCase();
+    });
+    return dup ? 'Este nome já existe. Escolha outro para facilitar a visualização.' : null;
+  }, [editingPromptId, library, promptName]);
+
   const startNewPrompt = () => {
     setEditingPromptId(null);
     setPromptName('');
@@ -191,18 +203,9 @@ export default function AgentPromptPage() {
     setError(null);
     setSuccessMessage(null);
     try {
-      const normalizedName = promptName.trim();
-      if (normalizedName) {
-        const dup = library.find((p) => {
-          const pName = (p.name ?? '').trim();
-          if (!pName) return false;
-          if (editingPromptId && p.id === editingPromptId) return false;
-          return pName.toLowerCase() === normalizedName.toLowerCase();
-        });
-        if (dup?.id) {
-          setError('Já existe um prompt com esse nome.');
-          return;
-        }
+      if (duplicatePromptNameMessage) {
+        setError(duplicatePromptNameMessage);
+        return;
       }
       if (promptText.trim().length > maxStoredPromptLength) {
         setError(`Prompt muito grande (máx. ${maxStoredPromptLength} caracteres).`);
@@ -512,6 +515,7 @@ export default function AgentPromptPage() {
                 className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-primary focus:outline-none"
                 disabled={isSavingLibrary}
               />
+              {duplicatePromptNameMessage && <div className="mt-1 text-xs text-red-700">{duplicatePromptNameMessage}</div>}
             </label>
             <label className="block text-sm font-medium text-gray-700">
               Prompt
@@ -544,7 +548,12 @@ export default function AgentPromptPage() {
                 )}
                 <button
                   type="submit"
-                  disabled={isSavingLibrary || !promptText.trim() || promptText.trim().length > maxStoredPromptLength}
+                  disabled={
+                    isSavingLibrary ||
+                    !promptText.trim() ||
+                    promptText.trim().length > maxStoredPromptLength ||
+                    !!duplicatePromptNameMessage
+                  }
                   className="rounded-lg bg-slate-900 px-4 py-2 font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
                 >
                   {isSavingLibrary ? 'Salvando...' : editingPromptId ? 'Atualizar' : 'Criar'}
