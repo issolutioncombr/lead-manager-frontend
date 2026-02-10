@@ -209,7 +209,7 @@ export default function AgentPromptPage() {
         });
         const created = resp.data.data;
         setLibrary((curr) => [created, ...curr]);
-        setEditingPromptId(created.id);
+        startNewPrompt();
         setSuccessMessage('Prompt criado com sucesso.');
       }
     } catch (err) {
@@ -505,13 +505,25 @@ export default function AgentPromptPage() {
               <span>
                 {promptText.length} / {maxStoredPromptLength} caracteres
               </span>
-              <button
-                type="submit"
-                disabled={isSavingLibrary || !promptText.trim() || promptText.trim().length > maxStoredPromptLength}
-                className="rounded-lg bg-slate-900 px-4 py-2 font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
-              >
-                {isSavingLibrary ? 'Salvando...' : 'Salvar'}
-              </button>
+              <div className="flex items-center gap-2">
+                {editingPromptId && (
+                  <button
+                    type="button"
+                    onClick={startNewPrompt}
+                    disabled={isSavingLibrary}
+                    className="rounded-lg border px-4 py-2 font-semibold text-slate-900 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Cancelar
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  disabled={isSavingLibrary || !promptText.trim() || promptText.trim().length > maxStoredPromptLength}
+                  className="rounded-lg bg-slate-900 px-4 py-2 font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
+                >
+                  {isSavingLibrary ? 'Salvando...' : editingPromptId ? 'Atualizar' : 'Criar'}
+                </button>
+              </div>
             </div>
           </form>
         </div>
