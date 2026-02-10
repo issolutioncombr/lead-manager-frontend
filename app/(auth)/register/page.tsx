@@ -9,7 +9,7 @@ import api from '../../../lib/api';
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [form, setForm] = useState({ name: '', companyName: '', email: '', password: '', confirm: '' });
+  const [form, setForm] = useState({ name: '', companyName: '', cpfCnpj: '', email: '', password: '', confirm: '' });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -27,6 +27,7 @@ export default function RegisterPage() {
       await api.post('/auth/register', {
         name: form.name,
         companyName: form.companyName,
+        cpfCnpj: form.cpfCnpj.replace(/\D/g, ''),
         email: form.email,
         password: form.password
       });
@@ -109,6 +110,19 @@ export default function RegisterPage() {
               onChange={(event) => setForm((prev) => ({ ...prev, companyName: event.target.value }))}
               className="mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-2 focus:border-primary focus:bg-white focus:outline-none"
               placeholder="Ex.: Clinica Exemplo LTDA"
+            />
+          </label>
+
+          <label className="mb-4 block text-sm font-medium text-gray-700">
+            CPF/CNPJ
+            <input
+              type="text"
+              inputMode="numeric"
+              required
+              value={form.cpfCnpj}
+              onChange={(event) => setForm((prev) => ({ ...prev, cpfCnpj: event.target.value }))}
+              className="mt-1 w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-2 focus:border-primary focus:bg-white focus:outline-none"
+              placeholder="Digite o CPF ou CNPJ"
             />
           </label>
 
