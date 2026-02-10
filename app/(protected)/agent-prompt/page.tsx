@@ -151,6 +151,7 @@ export default function AgentPromptPage() {
 
   const totalPercent = useMemo(() => links.reduce((acc, l) => acc + (l.active ? Number(l.percent || 0) : 0), 0), [links]);
   const canSaveLinks = links.length === 0 || totalPercent === 100;
+  const percentDelta = useMemo(() => 100 - totalPercent, [totalPercent]);
 
   const availableToAdd = useMemo(() => {
     const linked = new Set(links.map((l) => l.promptId));
@@ -190,6 +191,19 @@ export default function AgentPromptPage() {
     setError(null);
     setSuccessMessage(null);
     try {
+      const normalizedName = promptName.trim();
+      if (normalizedName) {
+        const dup = library.find((p) => {
+          const pName = (p.name ?? '').trim();
+          if (!pName) return false;
+          if (editingPromptId && p.id === editingPromptId) return false;
+          return pName.toLowerCase() === normalizedName.toLowerCase();
+        });
+        if (dup?.id) {
+          setError('Já existe um prompt com esse nome.');
+          return;
+        }
+      }
       if (promptText.trim().length > maxStoredPromptLength) {
         setError(`Prompt muito grande (máx. ${maxStoredPromptLength} caracteres).`);
         return;
@@ -255,7 +269,7 @@ export default function AgentPromptPage() {
   const saveLinks = async () => {
     if (!selectedInstanceId) return;
     if (!canSaveLinks) {
-      setError('A soma dos percentuais ativos deve ser 100.');
+      setError(`Para salvar os vínculos, o total ativo deve ser 100%. Atualmente: ${totalPercent}%.`);
       return;
     }
     if (isSavingLinks) return;
@@ -355,7 +369,14 @@ export default function AgentPromptPage() {
           </div>
 
           <div className="text-sm text-gray-600">
-            Total ativo: <span className={canSaveLinks ? 'font-semibold text-green-700' : 'font-semibold text-red-700'}>{totalPercent}%</span>
+            Total ativo:{' '}
+            <span className={canSaveLinks ? 'font-semibold text-green-700' : 'font-semibold text-red-700'}>{totalPercent}%</span>
+            {links.length > 0 && !canSaveLinks && (
+              <span className="ml-2 text-xs text-red-700">
+                {percentDelta > 0 ? `Faltam ${percentDelta}% para chegar em 100%.` : `Excedeu ${Math.abs(percentDelta)}% (precisa ser 100%).`}
+              </span>
+            )}
+            {links.length > 0 && canSaveLinks && <span className="ml-2 text-xs text-green-700">Pronto para salvar.</span>}
           </div>
 
           <div className="space-y-2">
@@ -427,6 +448,11 @@ export default function AgentPromptPage() {
           >
             {isSavingLinks ? 'Salvando...' : 'Salvar vínculos'}
           </button>
+          {links.length > 0 && !canSaveLinks && (
+            <div className="text-xs text-red-700">
+              Ajuste os percentuais para que a soma dos vínculos ativos fique exatamente em 100%.
+            </div>
+          )}
         </div>
 
         <div className="space-y-4 rounded-lg border bg-white p-4">
