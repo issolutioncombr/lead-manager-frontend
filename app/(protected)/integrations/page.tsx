@@ -183,6 +183,7 @@ export default function IntegrationsPage() {
   const [isEvolutionCreateModalOpen, setIsEvolutionCreateModalOpen] = useState(false);
   const [isEvolutionRegisterModalOpen, setIsEvolutionRegisterModalOpen] = useState(false);
   const [isEvolutionRegisteringExisting, setIsEvolutionRegisteringExisting] = useState(false);
+  const [evolutionSyncingWebhookInstanceId, setEvolutionSyncingWebhookInstanceId] = useState<string | null>(null);
   const [evolutionInstanceNameInput, setEvolutionInstanceNameInput] = useState('');
   const [evolutionWebhookUrlInput, setEvolutionWebhookUrlInput] = useState('');
   const [evolutionRegisterNameInput, setEvolutionRegisterNameInput] = useState('');
@@ -829,6 +830,24 @@ export default function IntegrationsPage() {
     },
     [handleEvolutionRegisterSubmit]
   );
+
+  const handleEvolutionSyncWebhook = useCallback(async (instance: EvolutionSession) => {
+    if (!instance?.instanceId) return;
+    setEvolutionError(null);
+    setEvolutionModalError(null);
+    setFeedback(null);
+    setEvolutionSyncingWebhookInstanceId(instance.instanceId);
+    try {
+      await api.post(`/integrations/evolution/instances/${instance.instanceId}/webhook/sync`);
+      await loadEvolutionStatus(instance.instanceId);
+      setFeedback({ type: 'success', message: 'Webhook sincronizado com sucesso.' });
+    } catch (err) {
+      console.error(err);
+      setEvolutionError('Nao foi possivel sincronizar o webhook da instancia.');
+    } finally {
+      setEvolutionSyncingWebhookInstanceId(null);
+    }
+  }, [loadEvolutionStatus]);
 
   const handleEvolutionDisconnect = useCallback(async () => {
     if (!evolutionSession?.instanceId) {
@@ -1508,6 +1527,18 @@ export default function IntegrationsPage() {
                       className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-dark disabled:cursor-not-allowed disabled:bg-gray-300"
                     >
                       {actionLabel}
+                    </button>
+                    <button
+                      onClick={() => handleEvolutionSyncWebhook(instance)}
+                      disabled={
+                        evolutionRemovingInstanceId === instance.instanceId ||
+                        isEvolutionCreatingInstance ||
+                        isEvolutionActionLoading ||
+                        evolutionSyncingWebhookInstanceId === instance.instanceId
+                      }
+                      className="rounded-lg border border-primary px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/10 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400"
+                    >
+                      {evolutionSyncingWebhookInstanceId === instance.instanceId ? 'Sincronizando...' : 'Sincronizar webhook'}
                     </button>
                     <button
                       onClick={() => {
