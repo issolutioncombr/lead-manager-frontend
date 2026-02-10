@@ -150,7 +150,7 @@ export default function AgentPromptPage() {
   }, [authLoading, seller, selectedInstanceId]);
 
   const totalPercent = useMemo(() => links.reduce((acc, l) => acc + (l.active ? Number(l.percent || 0) : 0), 0), [links]);
-  const canSaveLinks = links.length === 0 || totalPercent === 100;
+  const canSaveLinks = links.length === 0 || Math.abs(totalPercent - 100) < 0.0001;
   const percentDelta = useMemo(() => 100 - totalPercent, [totalPercent]);
 
   const availableToAdd = useMemo(() => {
@@ -400,11 +400,16 @@ export default function AgentPromptPage() {
                       type="number"
                       min={0}
                       max={100}
+                      step={0.01}
                       value={String(l.percent ?? 0)}
                       onChange={(e) => {
                         const v = Number(e.target.value);
                         setLinks((curr) =>
-                          curr.map((x) => (x.promptId === l.promptId ? { ...x, percent: Number.isFinite(v) ? Math.max(0, Math.min(100, Math.floor(v))) : 0 } : x))
+                          curr.map((x) =>
+                            x.promptId === l.promptId
+                              ? { ...x, percent: Number.isFinite(v) ? Math.max(0, Math.min(100, Math.round(v * 100) / 100)) : 0 }
+                              : x
+                          )
                         );
                         setError(null);
                         setSuccessMessage(null);

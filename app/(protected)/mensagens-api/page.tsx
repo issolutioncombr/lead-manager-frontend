@@ -21,6 +21,10 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [selectedAvatarUrl, setSelectedAvatarUrl] = useState<string | null>(null);
   const [selectedOriginLabel, setSelectedOriginLabel] = useState<string | null>(null);
+  const [abPromptOptions, setAbPromptOptions] = useState<Array<{ id: string; label: string }>>([]);
+  const [abSelectedPromptId, setAbSelectedPromptId] = useState<string | null>(null);
+  const [abAssignedBy, setAbAssignedBy] = useState<string | null>(null);
+  const [abIsLoading, setAbIsLoading] = useState(false);
   const [selectedOriginInstanceId, setSelectedOriginInstanceId] = useState<string | null>(null);
    const [messages, setMessages] = useState<Message[]>([]);
    const [isLoadingChats, setIsLoadingChats] = useState(false);
@@ -583,6 +587,81 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
   }, [selectedOriginInstanceId]);
 
   useEffect(() => {
+    const phone = selectedContact ? selectedContact.replace(/\D+/g, '') : '';
+    const effectiveInstanceId = (instanceId || selectedOriginInstanceId || '').toString().trim();
+    if (!phone || !effectiveInstanceId) {
+      setAbPromptOptions([]);
+      setAbSelectedPromptId(null);
+      setAbAssignedBy(null);
+      return;
+    }
+    let active = true;
+    setAbIsLoading(true);
+    Promise.all([
+      api.get(`/agent-prompt/instances/${encodeURIComponent(effectiveInstanceId)}/prompts`),
+      api.get(`/agent-prompt/instances/${encodeURIComponent(effectiveInstanceId)}/destinations/${encodeURIComponent(phone)}/assignment`)
+    ])
+      .then(([linksResp, assignResp]) => {
+        if (!active) return;
+        const links = Array.isArray((linksResp.data as any)?.links) ? (linksResp.data as any).links : [];
+        const options = links
+          .filter((l: any) => l?.active !== false && l?.prompt?.active !== false)
+          .map((l: any) => {
+            const pct = typeof l?.percent === 'number' ? l.percent : 0;
+            const name = (l?.prompt?.name ?? '').toString().trim();
+            const labelBase = name || `Prompt ${String(l?.promptId ?? '').slice(0, 6)}`;
+            const label = `${labelBase} (${pct.toFixed(2).replace(/\.00$/, '')}%)`;
+            return { id: String(l?.promptId ?? ''), label };
+          })
+          .filter((o: any) => typeof o.id === 'string' && o.id.length > 0);
+        setAbPromptOptions(options);
+        const assignment = (assignResp.data as any)?.assignment ?? null;
+        setAbSelectedPromptId(assignment?.promptId ? String(assignment.promptId) : null);
+        setAbAssignedBy(assignment?.assignedBy ? String(assignment.assignedBy) : null);
+      })
+      .catch(() => {
+        if (!active) return;
+        setAbPromptOptions([]);
+        setAbSelectedPromptId(null);
+        setAbAssignedBy(null);
+      })
+      .finally(() => {
+        if (!active) return;
+        setAbIsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [instanceId, selectedContact, selectedOriginInstanceId]);
+
+  const setManualAbPrompt = useCallback(
+    async (promptId: string | null) => {
+      const phone = selectedContact ? selectedContact.replace(/\D+/g, '') : '';
+      const effectiveInstanceId = (instanceId || selectedOriginInstanceId || '').toString().trim();
+      if (!phone || !effectiveInstanceId) return;
+      setAbIsLoading(true);
+      setError(null);
+      try {
+        const resp = await api.put(
+          `/agent-prompt/instances/${encodeURIComponent(effectiveInstanceId)}/destinations/${encodeURIComponent(phone)}/assignment`,
+          { promptId }
+        );
+        const assignment = (resp.data as any)?.assignment ?? null;
+        setAbSelectedPromptId(assignment?.promptId ? String(assignment.promptId) : null);
+        setAbAssignedBy(assignment?.assignedBy ? String(assignment.assignedBy) : null);
+      } catch (e) {
+        const status = (e as any)?.response?.status;
+        const msg = (e as any)?.response?.data?.message;
+        const m = typeof msg === 'string' ? msg : Array.isArray(msg) ? msg.join(', ') : null;
+        setError(m ? `${m}${status ? ` (HTTP ${status})` : ''}` : 'Não foi possível alterar o prompt.');
+      } finally {
+        setAbIsLoading(false);
+      }
+    },
+    [instanceId, selectedContact, selectedOriginInstanceId]
+  );
+
+  useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
 
@@ -876,6 +955,11 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
           formatPhone={formatPhone}
           realtimeMode={realtimeMode}
           streamConnected={streamConnected}
+          abOptions={abPromptOptions}
+          abSelectedPromptId={abSelectedPromptId}
+          abAssignedBy={abAssignedBy}
+          abLoading={abIsLoading}
+          onSelectAbPrompt={(id) => void setManualAbPrompt(id)}
           onRefresh={() => {
             if (!selectedContact) return;
             scrollToBottomNextRef.current = true;

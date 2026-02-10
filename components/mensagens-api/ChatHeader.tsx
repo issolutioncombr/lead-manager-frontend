@@ -10,6 +10,11 @@ export function ChatHeader(props: {
   onRefresh: () => void;
   onForcePolling: () => void;
   onRetryStream: () => void;
+  abOptions?: Array<{ id: string; label: string }>;
+  abSelectedPromptId?: string | null;
+  abAssignedBy?: string | null;
+  abLoading?: boolean;
+  onSelectAbPrompt?: (promptId: string | null) => void;
 }) {
   const phoneDisplay = props.selectedContact ? props.formatPhone(props.selectedContact) : null;
   const title = props.selectedContact ? (props.selectedName || phoneDisplay || `+${props.normalizedPhone}`) : 'Selecione uma conversa';
@@ -17,6 +22,8 @@ export function ChatHeader(props: {
   const subtitle = props.selectedContact ? `Origem: ${originDisplay} • Destino: ${phoneDisplay ?? `+${props.normalizedPhone}`}` : '—';
   const avatarLetter = (props.selectedName || phoneDisplay || 'C').trim()[0] ?? 'C';
   const badge = props.realtimeMode === 'stream' ? (props.streamConnected ? 'Tempo real' : 'Conectando') : 'Polling';
+  const showAb = !!props.selectedContact && Array.isArray(props.abOptions) && props.abOptions.length > 0 && typeof props.onSelectAbPrompt === 'function';
+  const abLabel = props.abAssignedBy === 'manual' ? 'Manual' : props.abAssignedBy === 'auto' ? 'A/B' : props.abAssignedBy === 'legacy' ? 'Legado' : null;
 
   return (
     <div className="border-b border-[#202c33] px-4 py-3 text-[#e9edef]">
@@ -29,6 +36,28 @@ export function ChatHeader(props: {
           <p className="truncate text-xs text-[#8696a0]">{subtitle}</p>
         </div>
         <div className="ml-auto flex items-center gap-2">
+          {showAb && (
+            <div className="flex items-center gap-2">
+              {abLabel && (
+                <span className="rounded-full border border-[#202c33] bg-[#0b141a] px-2 py-1 text-[11px] text-[#e9edef]">
+                  {abLabel}
+                </span>
+              )}
+              <select
+                value={props.abSelectedPromptId ?? ''}
+                onChange={(e) => props.onSelectAbPrompt?.(e.target.value ? e.target.value : null)}
+                disabled={!!props.abLoading}
+                className="rounded-md border border-[#202c33] bg-[#0b141a] px-2 py-1 text-xs text-[#e9edef]"
+              >
+                <option value="">Padrão (A/B)</option>
+                {props.abOptions?.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <span className="rounded-full border border-[#202c33] bg-[#0b141a] px-2 py-1 text-[11px] text-[#e9edef]">
             {badge}
           </span>
