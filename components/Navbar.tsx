@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import clsx from 'clsx';
 
 import { BrandMark } from './BrandMark';
@@ -21,33 +21,41 @@ type IconName =
   | 'clock';
 
 type LinkItem = { type: 'link'; href: string; label: string; icon: IconName };
-type GroupItem = { type: 'group'; label: string; icon: IconName; children: Array<{ href: string; label: string }> };
+type GroupItem = {
+  type: 'group';
+  label: string;
+  icon: IconName;
+  children: Array<{ href: string; label: string }>;
+};
 type NavItem = LinkItem | GroupItem;
 
-const links: NavItem[] = [
+const SIDEBAR_COLLAPSED_KEY = 'crm_sidebar_collapsed';
+
+const BASE_ITEMS: NavItem[] = [
   { type: 'link', href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
-  // { href: '/clients', label: 'Clientes', icon: 'users' },
-  // { href: '/alunos', label: 'Alunos', icon: 'users' },
   { type: 'link', href: '/leads', label: 'Leads', icon: 'funnel' },
   { type: 'link', href: '/conversations', label: 'Conversas', icon: 'users' },
   { type: 'link', href: '/mensagens-api', label: 'Mensagens API', icon: 'users' },
-  { type: 'link', href: '/bot-controls', label: 'Botões e Webhooks', icon: 'sparkles' },
-  { type: 'link', href: '/sellers', label: 'Vendedores', icon: 'users' },
-  // { href: '/course-leads', label: 'Leads Curso', icon: 'funnel' },
   { type: 'link', href: '/appointments', label: 'Video Chamadas', icon: 'calendar' },
-  // { href: '/campaigns', label: 'Campanhas', icon: 'megaphone' },
   { type: 'link', href: '/integrations', label: 'Integrações', icon: 'puzzle' },
+  { type: 'link', href: '/reports', label: 'Relatórios', icon: 'chart' },
   {
     type: 'group',
-    label: 'Prompt do agente',
+    label: 'Automação',
     icon: 'sparkles',
     children: [
-      { href: '/agent-prompt', label: 'Configuração' },
-      { href: '/agent-prompt/reports', label: 'Relatórios Prompt' }
+      { href: '/bot-controls', label: 'Botões e Webhooks' },
+      { href: '/agent-prompt', label: 'Prompt do agente' },
+      { href: '/agent-prompt/reports', label: 'Relatórios Prompt' },
+      { href: '/bot-actions', label: 'Acionar Botões' }
     ]
   },
-  { type: 'link', href: '/bot-actions', label: 'Acionar Botões', icon: 'clock' },
-  { type: 'link', href: '/reports', label: 'Relatórios', icon: 'chart' }
+  {
+    type: 'group',
+    label: 'Configurações',
+    icon: 'users',
+    children: [{ href: '/sellers', label: 'Vendedores' }]
+  }
 ];
 
 function Icon({ name, className }: { name: IconName; className?: string }) {
@@ -153,31 +161,77 @@ export const Navbar = () => {
   const { user, seller, logout } = useAuth();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1';
+  });
+  const [openGroupLabel, setOpenGroupLabel] = useState<string | null>(null);
+  const hasRouteEffectMounted = useRef(false);
 
-  const navigationLinks = useMemo(() => {
-    const baseLinks = links.filter((item) => {
-      if (!seller) return true;
-      if (item.type === 'link') return !(item.href === '/sellers');
-      if (item.type === 'group') return item.label !== 'Prompt do agente';
-      return true;
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0');
+  }, [collapsed]);
+
+  useEffect(() => {
+    if (!hasRouteEffectMounted.current) {
+      hasRouteEffectMounted.current = true;
+      return;
+    }
+    setMobileOpen(false);
+    setOpenGroupLabel(null);
+    setCollapsed(true);
+  }, [pathname]);
+
+  const navigationItems = useMemo<NavItem[]>(() => {
+    const items: NavItem[] = BASE_ITEMS.map((item) => {
+      if (item.type === 'link') return item;
+      return { ...item, children: [...item.children] };
     });
+
     const attendanceLink: LinkItem = {
       type: 'link',
       href: '/attendance',
       label: seller ? 'Atendimento' : 'Agenda dos vendedores',
       icon: 'clock'
     };
-    const insertIndex = baseLinks.findIndex((item) => item.type === 'link' && item.href === '/appointments');
-    if (insertIndex >= 0) {
-      baseLinks.splice(insertIndex + 1, 0, attendanceLink);
+
+    const appointmentsIndex = items.findIndex((item) => item.type === 'link' && item.href === '/appointments');
+    if (appointmentsIndex >= 0) {
+      items.splice(appointmentsIndex + 1, 0, attendanceLink);
     } else {
-      baseLinks.push(attendanceLink);
+      items.push(attendanceLink);
     }
-    if (user?.isAdmin || user?.role === 'admin') {
-      baseLinks.splice(1, 0, { type: 'link', href: '/approvals', label: 'Aprovações', icon: 'users' });
-      baseLinks.splice(2, 0, { type: 'link', href: '/users', label: 'Usuários', icon: 'users' });
+
+    const isAdmin = user?.isAdmin || user?.role === 'admin';
+    const configIndex = items.findIndex((item) => item.type === 'group' && item.label === 'Configurações');
+    if (isAdmin && configIndex >= 0) {
+      const configItem = items[configIndex];
+      if (configItem.type === 'group') {
+        configItem.children.push({ href: '/approvals', label: 'Aprovações' });
+        configItem.children.push({ href: '/users', label: 'Usuários' });
+      }
     }
-    return baseLinks;
+
+    const hiddenPrefixes = seller
+      ? ['/sellers', '/agent-prompt', '/approvals', '/users']
+      : [];
+
+    const filteredItems = items
+      .map((item) => {
+        if (item.type === 'link') {
+          return hiddenPrefixes.some((prefix) => item.href.startsWith(prefix)) ? null : item;
+        }
+
+        const filteredChildren = item.children.filter(
+          (child) => !hiddenPrefixes.some((prefix) => child.href.startsWith(prefix))
+        );
+        if (!filteredChildren.length) return null;
+        return { ...item, children: filteredChildren };
+      })
+      .filter(Boolean) as NavItem[];
+
+    return filteredItems;
   }, [seller, user?.isAdmin, user?.role]);
 
   const isGroupActive = (group: GroupItem) => group.children.some((c) => pathname.startsWith(c.href));
@@ -228,13 +282,16 @@ export const Navbar = () => {
           </div>
 
           <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-2 text-sm text-gray-700">
-            {navigationLinks.map((item) => {
+            {navigationItems.map((item) => {
               if (item.type === 'link') {
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
-                    onClick={() => setMobileOpen(false)}
+                    onClick={() => {
+                      setMobileOpen(false);
+                      setOpenGroupLabel(null);
+                    }}
                     className={clsx(
                       'block rounded-md px-3 py-2 transition',
                       pathname.startsWith(item.href)
@@ -250,34 +307,43 @@ export const Navbar = () => {
                 );
               }
               const active = isGroupActive(item);
+              const isOpen = openGroupLabel === item.label;
               return (
                 <div key={item.label} className="rounded-md">
-                  <div
+                  <button
+                    type="button"
                     className={clsx(
-                      'flex items-center gap-3 rounded-md px-3 py-2',
+                      'flex w-full items-center gap-3 rounded-md px-3 py-2 text-left',
                       active ? 'bg-primary/10 text-primary' : 'text-gray-700'
                     )}
+                    onClick={() => setOpenGroupLabel((current) => (current === item.label ? null : item.label))}
                   >
                     <Icon name={item.icon} className="h-5 w-5" />
                     <span className="font-semibold">{item.label}</span>
-                  </div>
-                  <div className="mt-1 space-y-1 pl-9">
-                    {item.children.map((c) => (
-                      <Link
-                        key={c.href}
-                        href={c.href}
-                        onClick={() => setMobileOpen(false)}
-                        className={clsx(
-                          'block rounded-md px-3 py-2 text-sm transition',
-                          pathname.startsWith(c.href)
-                            ? 'bg-primary/10 text-primary'
-                            : 'hover:bg-gray-100 hover:text-primary-dark'
-                        )}
-                      >
-                        {c.label}
-                      </Link>
-                    ))}
-                  </div>
+                    <span className="ml-auto text-gray-400">{isOpen ? '—' : '+'}</span>
+                  </button>
+                  {isOpen ? (
+                    <div className="mt-1 space-y-1 pl-9">
+                      {item.children.map((c) => (
+                        <Link
+                          key={c.href}
+                          href={c.href}
+                          onClick={() => {
+                            setMobileOpen(false);
+                            setOpenGroupLabel(null);
+                          }}
+                          className={clsx(
+                            'block rounded-md px-3 py-2 text-sm transition',
+                            pathname.startsWith(c.href)
+                              ? 'bg-primary/10 text-primary'
+                              : 'hover:bg-gray-100 hover:text-primary-dark'
+                          )}
+                        >
+                          {c.label}
+                        </Link>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               );
             })}
@@ -308,85 +374,164 @@ export const Navbar = () => {
         </aside>
       </div>
 
-      <aside className="hidden md:sticky md:top-0 md:flex md:h-screen md:flex-col w-64 shrink-0 border-r bg-white">
-        <div className="flex items-center gap-3 px-5 py-4">
-          <BrandMark iconClassName="h-9 w-9 text-sm" titleClassName="text-lg" showIcon={false} />
+      <aside
+        className={clsx(
+          'hidden shrink-0 border-r bg-white transition-all duration-200 md:sticky md:top-0 md:flex md:h-screen md:flex-col',
+          collapsed ? 'w-16' : 'w-64'
+        )}
+      >
+        <div
+          className={clsx(
+            'py-4',
+            collapsed ? 'flex flex-col items-center gap-2 px-2' : 'flex items-center justify-between px-5'
+          )}
+        >
+          <BrandMark
+            iconClassName="h-9 w-9 text-sm"
+            titleClassName={collapsed ? 'hidden' : 'text-lg'}
+            showIcon={collapsed}
+          />
+          <button
+            type="button"
+            aria-label={collapsed ? 'Expandir menu' : 'Recolher menu'}
+            onClick={() => setCollapsed((value) => !value)}
+            className="rounded-md p-2 text-gray-600 hover:bg-gray-100"
+            title={collapsed ? 'Expandir menu' : 'Recolher menu'}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-4 w-4"
+            >
+              {collapsed ? <path d="M10 6l6 6-6 6" /> : <path d="M14 6l-6 6 6 6" />}
+            </svg>
+          </button>
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-2 text-sm text-gray-700">
-          {navigationLinks.map((item) => {
+          {navigationItems.map((item) => {
             if (item.type === 'link') {
               return (
                 <Link
                   key={item.href}
                   href={item.href}
+                  title={collapsed ? item.label : undefined}
+                  aria-label={collapsed ? item.label : undefined}
                   className={clsx(
-                    'block rounded-md px-3 py-2 transition',
+                    'block rounded-md transition',
                     pathname.startsWith(item.href)
                       ? 'bg-primary/10 text-primary'
-                      : 'hover:bg-gray-100 hover:text-primary-dark'
+                      : 'hover:bg-gray-100 hover:text-primary-dark',
+                    collapsed ? 'px-2 py-2' : 'px-3 py-2'
                   )}
+                  onClick={() => {
+                    setCollapsed(true);
+                    setOpenGroupLabel(null);
+                  }}
                 >
-                  <span className="flex items-center gap-3">
+                  <span className={clsx('flex items-center', collapsed ? 'justify-center' : 'gap-3')}>
                     <Icon name={item.icon} className="h-5 w-5" />
-                    <span>{item.label}</span>
+                    <span className={clsx(collapsed ? 'hidden' : undefined)}>{item.label}</span>
                   </span>
                 </Link>
               );
             }
             const active = isGroupActive(item);
+            const isOpen = openGroupLabel === item.label;
             return (
               <div key={item.label} className="rounded-md">
-                <div
+                <button
+                  type="button"
                   className={clsx(
-                    'flex items-center gap-3 rounded-md px-3 py-2',
-                    active ? 'bg-primary/10 text-primary' : 'text-gray-700'
+                    'flex w-full items-center rounded-md transition',
+                    active ? 'bg-primary/10 text-primary' : 'text-gray-700',
+                    collapsed ? 'justify-center px-2 py-2' : 'gap-3 px-3 py-2'
                   )}
+                  title={collapsed ? item.label : undefined}
+                  aria-label={collapsed ? item.label : undefined}
+                  onClick={() => {
+                    if (collapsed) setCollapsed(false);
+                    setOpenGroupLabel((current) => (current === item.label ? null : item.label));
+                  }}
                 >
                   <Icon name={item.icon} className="h-5 w-5" />
-                  <span className="font-semibold">{item.label}</span>
-                </div>
-                <div className="mt-1 space-y-1 pl-9">
-                  {item.children.map((c) => (
-                    <Link
-                      key={c.href}
-                      href={c.href}
-                      className={clsx(
-                        'block rounded-md px-3 py-2 text-sm transition',
-                        pathname.startsWith(c.href)
-                          ? 'bg-primary/10 text-primary'
-                          : 'hover:bg-gray-100 hover:text-primary-dark'
-                      )}
-                    >
-                      {c.label}
-                    </Link>
-                  ))}
-                </div>
+                  <span className={clsx('font-semibold', collapsed ? 'hidden' : undefined)}>{item.label}</span>
+                  <span className={clsx('ml-auto text-gray-400', collapsed ? 'hidden' : undefined)}>
+                    {isOpen ? '—' : '+'}
+                  </span>
+                </button>
+                {!collapsed && isOpen ? (
+                  <div className="mt-1 space-y-1 pl-9">
+                    {item.children.map((c) => (
+                      <Link
+                        key={c.href}
+                        href={c.href}
+                        className={clsx(
+                          'block rounded-md px-3 py-2 text-sm transition',
+                          pathname.startsWith(c.href)
+                            ? 'bg-primary/10 text-primary'
+                            : 'hover:bg-gray-100 hover:text-primary-dark'
+                        )}
+                        onClick={() => {
+                          setCollapsed(true);
+                          setOpenGroupLabel(null);
+                        }}
+                      >
+                        {c.label}
+                      </Link>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             );
           })}
         </nav>
 
-        <div className="mt-auto border-t px-4 py-4">
-          <div className="mb-3 text-xs space-y-3">
-            <AccountDetails label="Empresa" name={user?.name} email={user?.email} />
-            {seller && (
-              <div className="border-t border-dashed border-gray-200 pt-2">
-                <AccountDetails label="Vendedor" name={seller.name} email={seller.email} />
-              </div>
-            )}
-          </div>
+        <div className={clsx('mt-auto border-t py-4', collapsed ? 'px-2' : 'px-4')}>
+          {!collapsed ? (
+            <div className="mb-3 space-y-3 text-xs">
+              <AccountDetails label="Empresa" name={user?.name} email={user?.email} />
+              {seller && (
+                <div className="border-t border-dashed border-gray-200 pt-2">
+                  <AccountDetails label="Vendedor" name={seller.name} email={seller.email} />
+                </div>
+              )}
+            </div>
+          ) : null}
           <button
             onClick={handleLogout}
             disabled={isLoggingOut}
+            title="Sair"
             className={clsx(
-              'w-full rounded-lg border border-primary px-3 py-2 text-xs font-semibold transition',
+              'rounded-lg border border-primary text-xs font-semibold transition',
+              collapsed ? 'mx-auto flex h-10 w-10 items-center justify-center p-0' : 'w-full px-3 py-2',
               isLoggingOut
                 ? 'cursor-not-allowed border-gray-300 bg-gray-200 text-gray-400'
                 : 'text-primary hover:bg-primary hover:text-white'
             )}
           >
-            {isLoggingOut ? 'Saindo...' : 'Sair'}
+            {collapsed ? (
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-4 w-4"
+              >
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <path d="M16 17l5-5-5-5" />
+                <path d="M21 12H9" />
+              </svg>
+            ) : null}
+            <span className={clsx(collapsed ? 'sr-only' : undefined)}>
+              {isLoggingOut ? 'Saindo...' : 'Sair'}
+            </span>
           </button>
         </div>
       </aside>
