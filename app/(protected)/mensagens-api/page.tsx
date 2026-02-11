@@ -1001,6 +1001,7 @@ const isMessagePayload = (value: unknown): value is Message => {
          },
          { headers: { 'x-request-id': newRequestId() } }
        );
+       void setConversationAgentStatusRemote('PAUSADO');
        setText('');
        setCaption('');
        setMediaUrl('');
@@ -1014,7 +1015,7 @@ const isMessagePayload = (value: unknown): value is Message => {
        );
        setError('Falha ao enviar mensagem.');
      }
- }, [caption, instanceId, mediaUrl, mergeMessages, newRequestId, normalizedPhone, resolveInstanceIdForProvider, text]);
+ }, [caption, instanceId, mediaUrl, mergeMessages, newRequestId, normalizedPhone, resolveInstanceIdForProvider, setConversationAgentStatusRemote, text]);
  
    useEffect(() => {
     if (!selectedContact) return;
