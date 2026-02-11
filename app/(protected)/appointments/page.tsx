@@ -480,7 +480,7 @@ export default function AppointmentsPage() {
       )}
 
       <div className="rounded-2xl bg-white shadow">
-        <div className="block lg:hidden">
+        <div className="block xl:hidden">
           <div className="divide-y divide-gray-100">
             {isLoading ? (
               <div className="p-4 text-sm text-gray-500">Carregando...</div>
@@ -578,7 +578,7 @@ export default function AppointmentsPage() {
           </div>
         </div>
 
-        <div className="hidden lg:block">
+        <div className="hidden xl:block">
           <table className="w-full divide-y divide-gray-200">
             <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
               <tr>

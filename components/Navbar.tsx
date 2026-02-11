@@ -40,6 +40,7 @@ const BASE_ITEMS: NavItem[] = [
   { type: 'link', href: '/appointments', label: 'Video Chamadas', icon: 'calendar' },
   { type: 'link', href: '/integrations', label: 'Integrações', icon: 'puzzle' },
   { type: 'link', href: '/reports', label: 'Relatórios', icon: 'chart' },
+  { type: 'link', href: '/reports/seller-appointments', label: 'Calls por vendedor', icon: 'chart' },
   {
     type: 'group',
     label: 'Automação',
@@ -55,7 +56,10 @@ const BASE_ITEMS: NavItem[] = [
     type: 'group',
     label: 'Configurações',
     icon: 'users',
-    children: [{ href: '/sellers', label: 'Vendedores' }]
+    children: [
+      { href: '/sellers', label: 'Vendedores' },
+      { href: '/seller-notes', label: 'Notas Seller' }
+    ]
   }
 ];
 
@@ -222,7 +226,12 @@ export const Navbar = () => {
       const appointmentsLink: LinkItem =
         appointmentsFromBase ?? ({ type: 'link', href: '/appointments', label: 'Video Chamadas', icon: 'calendar' } as const);
 
-      const sellerItems: NavItem[] = [appointmentsLink, attendanceLink];
+      const sellerItems: NavItem[] = [
+        appointmentsLink,
+        attendanceLink,
+        { type: 'link', href: '/seller-notes', label: 'Notas Seller', icon: 'chart' },
+        { type: 'link', href: '/seller-reminders', label: 'Lembretes Seller', icon: 'clock' }
+      ];
       if (sellerLinkActive) {
         sellerItems.push({ type: 'link', href: '/leads', label: 'Leads', icon: 'funnel' });
         sellerItems.push({ type: 'link', href: '/mensagens-api', label: 'Mensagens API', icon: 'users' });

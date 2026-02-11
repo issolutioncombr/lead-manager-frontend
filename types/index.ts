@@ -125,6 +125,37 @@ export interface Appointment {
   }>;
 }
 
+export interface SellerCallNote {
+  id: string;
+  sellerId: string;
+  appointmentId: string;
+  title?: string | null;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+  seller?: { id: string; name: string; email?: string | null };
+  appointment?: Appointment;
+}
+
+export interface SellerReminder {
+  id: string;
+  title: string;
+  content?: string | null;
+  remindAt: string;
+  status: 'PENDING' | 'DONE' | 'CANCELED';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AppointmentBySellerReportRow {
+  sellerId: string;
+  sellerName: string;
+  sellerEmail: string | null;
+  appointment: Appointment;
+  notesCount: number;
+  lastNoteUpdatedAt: string | null;
+}
+
 export interface CampaignLog {
   id: string;
   message: string;
