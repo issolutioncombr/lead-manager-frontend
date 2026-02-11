@@ -54,6 +54,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
   const conversationRequestSeqRef = useRef(0);
   const messagesRef = useRef<Message[]>([]);
   const instanceIdRef = useRef<string>('');
+  const avatarRequestSeqRef = useRef(0);
   const lastCursorRef = useRef<{ lastTimestamp: string; lastUpdatedAt: string }>({
     lastTimestamp: new Date(0).toISOString(),
     lastUpdatedAt: new Date(0).toISOString()
@@ -70,6 +71,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
   }, [instanceId]);
 
   const resetConversationView = useCallback(() => {
+    avatarRequestSeqRef.current += 1;
     setSelectedContact(null);
     selectedContactRef.current = null;
     selectedRemoteJidRef.current = null;
@@ -598,17 +600,24 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
         delete copy[n];
         return copy;
       });
-      try {
-        const resp = await api.get<{ profilePicUrl: string | null }>('/integrations/evolution/messages/profile-pic', {
+      const avatarSeq = ++avatarRequestSeqRef.current;
+      void api
+        .get<{ profilePicUrl: string | null }>('/integrations/evolution/messages/profile-pic', {
           params: {
             jid: (remoteJid ?? '').trim() || `${n}@s.whatsapp.net`,
             instanceId: effectiveInstanceId || originInstanceId || undefined
           }
+        })
+        .then((resp) => {
+          if (avatarSeq !== avatarRequestSeqRef.current) return;
+          if (selectedContactRef.current !== n) return;
+          setSelectedAvatarUrl(resp.data.profilePicUrl ?? avatarUrl ?? null);
+        })
+        .catch(() => {
+          if (avatarSeq !== avatarRequestSeqRef.current) return;
+          if (selectedContactRef.current !== n) return;
+          setSelectedAvatarUrl(avatarUrl ?? null);
         });
-        setSelectedAvatarUrl(resp.data.profilePicUrl ?? avatarUrl ?? null);
-      } catch {
-        setSelectedAvatarUrl(avatarUrl ?? null);
-      }
       await applyConversation(n, 50, { allowRetryLocal: true, remoteJid: remoteJid ?? null });
     },
     [applyConversation, instances]
@@ -625,29 +634,6 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
   useEffect(() => {
     selectedOriginInstanceIdRef.current = selectedOriginInstanceId;
   }, [selectedOriginInstanceId]);
-
-  useEffect(() => {
-    const phone = selectedContact ? selectedContact.replace(/\D+/g, '') : '';
-    const effectiveInstanceId = (instanceId || selectedOriginInstanceId || '').toString().trim();
-    if (!phone || !effectiveInstanceId) return;
-    let active = true;
-    api
-      .get<{ profilePicUrl: string | null }>('/integrations/evolution/messages/profile-pic', {
-        params: {
-          jid: (selectedRemoteJidRef.current ?? '').trim() || `${phone}@s.whatsapp.net`,
-          instanceId: effectiveInstanceId
-        }
-      })
-      .then((resp) => {
-        if (!active) return;
-        setSelectedAvatarUrl(resp.data.profilePicUrl ?? null);
-      })
-      .catch(() => {})
-      .finally(() => {});
-    return () => {
-      active = false;
-    };
-  }, [instanceId, selectedOriginInstanceId, selectedContact]);
 
   useEffect(() => {
     const phone = selectedContact ? selectedContact.replace(/\D+/g, '') : '';
