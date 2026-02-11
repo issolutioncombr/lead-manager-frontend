@@ -30,6 +30,7 @@ const isMessagePayload = (value: unknown): value is Message => {
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [selectedAvatarUrl, setSelectedAvatarUrl] = useState<string | null>(null);
   const [selectedOriginLabel, setSelectedOriginLabel] = useState<string | null>(null);
+  const [showChatHeader, setShowChatHeader] = useState(false);
   const [abPromptOptions, setAbPromptOptions] = useState<Array<{ id: string; label: string }>>([]);
   const [abSelectedPromptId, setAbSelectedPromptId] = useState<string | null>(null);
   const [abAssignedBy, setAbAssignedBy] = useState<string | null>(null);
@@ -82,6 +83,7 @@ const isMessagePayload = (value: unknown): value is Message => {
 
   const resetConversationView = useCallback(() => {
     avatarRequestSeqRef.current += 1;
+    setShowChatHeader(false);
     setSelectedContact(null);
     selectedContactRef.current = null;
     selectedRemoteJidRef.current = null;
@@ -116,15 +118,8 @@ const isMessagePayload = (value: unknown): value is Message => {
       setChats([]);
       setPreferLocal(false);
       setInstanceId(id);
-      if (!selectedContactRef.current) {
-        resetConversationView();
-        return;
-      }
-      if (!id) {
-        setSelectedOriginInstanceId(null);
-        setSelectedOriginLabel(null);
-        return;
-      }
+      resetConversationView();
+      if (!id) return;
       setSelectedOriginInstanceId(id);
       const match = instances.find((i) => i.id === id);
       setSelectedOriginLabel(match?.name ?? id);
@@ -698,6 +693,7 @@ const isMessagePayload = (value: unknown): value is Message => {
       selectedContactRef.current = n;
       setSelectedName((name ?? '').trim() ? (name ?? null) : null);
       const effectiveInstanceId = (instanceIdRef.current ?? '').toString().trim();
+      setShowChatHeader(!!effectiveInstanceId);
       if (!effectiveInstanceId) {
         setSelectedOriginInstanceId(originInstanceId ?? null);
         setSelectedOriginLabel(originNumber ?? originLabel ?? originInstanceId ?? 'todas instâncias');
@@ -1128,33 +1124,35 @@ const isMessagePayload = (value: unknown): value is Message => {
       />
 
       <section className="flex-1 rounded-lg border bg-[#0b141a]">
-        <ChatHeader
-          selectedContact={selectedContact}
-          selectedName={selectedName}
-          avatarUrl={selectedAvatarUrl}
-          originLabel={headerOriginLabel}
-          normalizedPhone={normalizedPhone}
-          formatPhone={formatPhone}
-          realtimeMode={realtimeMode}
-          streamConnected={streamConnected}
-          abOptions={abPromptOptions}
-          abSelectedPromptId={abSelectedPromptId}
-          abAssignedBy={abAssignedBy}
-          abLoading={abIsLoading}
-          onSelectAbPrompt={(id) => void setManualAbPrompt(id)}
-          onRefresh={() => {
-            if (!selectedContact) return;
-            scrollToBottomNextRef.current = true;
-            void applyConversation(selectedContact, conversationLimitRef.current, { allowRetryLocal: true });
-          }}
-          onForcePolling={() => {
-            setRealtimeMode('poll');
-            setStreamConnected(false);
-          }}
-          onRetryStream={() => {
-            setRealtimeMode('stream');
-          }}
-        />
+        {showChatHeader && !!instanceId && (
+          <ChatHeader
+            selectedContact={selectedContact}
+            selectedName={selectedName}
+            avatarUrl={selectedAvatarUrl}
+            originLabel={headerOriginLabel}
+            normalizedPhone={normalizedPhone}
+            formatPhone={formatPhone}
+            realtimeMode={realtimeMode}
+            streamConnected={streamConnected}
+            abOptions={abPromptOptions}
+            abSelectedPromptId={abSelectedPromptId}
+            abAssignedBy={abAssignedBy}
+            abLoading={abIsLoading}
+            onSelectAbPrompt={(id) => void setManualAbPrompt(id)}
+            onRefresh={() => {
+              if (!selectedContact) return;
+              scrollToBottomNextRef.current = true;
+              void applyConversation(selectedContact, conversationLimitRef.current, { allowRetryLocal: true });
+            }}
+            onForcePolling={() => {
+              setRealtimeMode('poll');
+              setStreamConnected(false);
+            }}
+            onRetryStream={() => {
+              setRealtimeMode('stream');
+            }}
+          />
+        )}
         <div className="flex h-full flex-col">
           <MessagesList
             selectedContact={selectedContact}
