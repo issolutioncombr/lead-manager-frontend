@@ -40,3 +40,28 @@ api.interceptors.response.use(
 );
 
 export default api;
+
+export type SellerActiveVideoCallLinkResponse = {
+  active: boolean;
+  link: null | {
+    sellerId: string;
+    leadId: string;
+    appointmentId: string | null;
+    lead?: { id: string; contact?: string | null; name?: string | null; email?: string | null };
+  };
+};
+
+export const getActiveSellerLink = async () => {
+  const { data } = await api.get<SellerActiveVideoCallLinkResponse>('/sellers/me/video-call-link/active');
+  return data;
+};
+
+export const linkSellerToVideoCall = async (sellerId: string, appointmentId: string) => {
+  const { data } = await api.post(`/sellers/${sellerId}/video-call-links`, { appointmentId });
+  return data;
+};
+
+export const unlinkSellerLink = async (sellerId: string, linkId: string) => {
+  const { data } = await api.delete(`/sellers/${sellerId}/video-call-links/${linkId}`);
+  return data;
+};

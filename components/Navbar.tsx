@@ -8,6 +8,7 @@ import clsx from 'clsx';
 import { BrandMark } from './BrandMark';
 import { Loading } from './Loading';
 import { useAuth } from '../hooks/useAuth';
+import api from '../lib/api';
 
 type IconName =
   | 'dashboard'
@@ -161,6 +162,7 @@ export const Navbar = () => {
   const { user, seller, logout } = useAuth();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [sellerLinkActive, setSellerLinkActive] = useState<boolean>(false);
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1';
@@ -183,6 +185,27 @@ export const Navbar = () => {
     setCollapsed(true);
   }, [pathname]);
 
+  useEffect(() => {
+    if (!seller) {
+      setSellerLinkActive(false);
+      return;
+    }
+    let cancelled = false;
+    api
+      .get<{ active: boolean }>('/sellers/me/video-call-link/active')
+      .then((resp) => {
+        if (cancelled) return;
+        setSellerLinkActive(!!resp.data?.active);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSellerLinkActive(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [seller]);
+
   const navigationItems = useMemo<NavItem[]>(() => {
     const attendanceLink: LinkItem = {
       type: 'link',
@@ -199,7 +222,12 @@ export const Navbar = () => {
       const appointmentsLink: LinkItem =
         appointmentsFromBase ?? ({ type: 'link', href: '/appointments', label: 'Video Chamadas', icon: 'calendar' } as const);
 
-      return [appointmentsLink, attendanceLink];
+      const sellerItems: NavItem[] = [appointmentsLink, attendanceLink];
+      if (sellerLinkActive) {
+        sellerItems.push({ type: 'link', href: '/leads', label: 'Leads', icon: 'funnel' });
+        sellerItems.push({ type: 'link', href: '/mensagens-api', label: 'Mensagens API', icon: 'users' });
+      }
+      return sellerItems;
     }
 
     const items: NavItem[] = BASE_ITEMS.map((item) => {
@@ -243,7 +271,7 @@ export const Navbar = () => {
       .filter(Boolean) as NavItem[];
 
     return filteredItems;
-  }, [seller, user?.isAdmin, user?.role]);
+  }, [seller, sellerLinkActive, user?.isAdmin, user?.role]);
 
   const isGroupActive = (group: GroupItem) => group.children.some((c) => pathname.startsWith(c.href));
 

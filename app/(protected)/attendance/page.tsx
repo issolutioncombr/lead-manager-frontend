@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
+import { useSearchParams } from 'next/navigation';
 
 import { Loading } from '../../../components/Loading';
 import { useAuth } from '../../../hooks/useAuth';
@@ -344,7 +345,7 @@ const SellerAttendanceManager = () => {
   );
 };
 
-const CompanyAttendanceOverview = () => {
+const CompanyAttendanceOverview = ({ initialSellerId }: { initialSellerId?: string | null }) => {
   const today = useMemo(() => new Date(), []);
   const [sellers, setSellers] = useState<SellerWithAvailability[]>([]);
   const [loading, setLoading] = useState(true);
@@ -356,6 +357,7 @@ const CompanyAttendanceOverview = () => {
   const [formState, setFormState] = useState({ startTime: '', endTime: '' });
   const [saving, setSaving] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [initialApplied, setInitialApplied] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -380,10 +382,15 @@ const CompanyAttendanceOverview = () => {
       setSelectedSellerId(null);
       return;
     }
+    if (!initialApplied && initialSellerId && sellers.some((seller) => seller.id === initialSellerId)) {
+      setSelectedSellerId(initialSellerId);
+      setInitialApplied(true);
+      return;
+    }
     if (!selectedSellerId || !sellers.some((seller) => seller.id === selectedSellerId)) {
       setSelectedSellerId(sellers[0].id);
     }
-  }, [sellers, selectedSellerId]);
+  }, [initialApplied, initialSellerId, sellers, selectedSellerId]);
 
   const calendarDays = useMemo(() => buildCalendarDays(currentMonth), [currentMonth]);
 
@@ -733,10 +740,12 @@ const CompanyAttendanceOverview = () => {
 
 export default function SellerAttendancePage() {
   const { seller } = useAuth();
+  const searchParams = useSearchParams();
+  const initialSellerId = searchParams.get('sellerId');
 
   if (seller) {
     return <SellerAttendanceManager />;
   }
 
-  return <CompanyAttendanceOverview />;
+  return <CompanyAttendanceOverview initialSellerId={initialSellerId} />;
 }

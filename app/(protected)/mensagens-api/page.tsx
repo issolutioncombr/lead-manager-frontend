@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
  import { useSearchParams } from 'next/navigation';
  import api from '../../../lib/api';
 import { getStoredAuth } from '../../../lib/auth-storage';
+import { useAuth } from '../../../hooks/useAuth';
 import { ChatHeader } from '../../../components/mensagens-api/ChatHeader';
 import { ChatList } from '../../../components/mensagens-api/ChatList';
 import { Composer } from '../../../components/mensagens-api/Composer';
@@ -21,6 +22,7 @@ const isMessagePayload = (value: unknown): value is Message => {
 
  export default function MensagensApiPage() {
    const searchParams = useSearchParams();
+  const { seller } = useAuth();
    const [instanceId, setInstanceId] = useState<string>('');
  const [instances, setInstances] = useState<Array<{ id: string; name?: string | null; profilePicUrl?: string | null; providerInstanceId?: string | null; internalInstanceId?: string | null }>>([]);
    const [chats, setChats] = useState<ChatItem[]>([]);
@@ -88,6 +90,11 @@ const isMessagePayload = (value: unknown): value is Message => {
   useEffect(() => {
     selectedAvatarUrlRef.current = selectedAvatarUrl;
   }, [selectedAvatarUrl]);
+
+  useEffect(() => {
+    if (!seller) return;
+    setPreferLocal(true);
+  }, [seller]);
 
   const normalizePhoneLike = useCallback((value?: string | null) => {
     const d = String(value ?? '').replace(/\D+/g, '');
@@ -919,6 +926,23 @@ const isMessagePayload = (value: unknown): value is Message => {
     }
      // eslint-disable-next-line react-hooks/exhaustive-deps
    }, []);
+
+  useEffect(() => {
+    if (!seller) return;
+    if (selectedContactRef.current) return;
+    if (!chats.length) return;
+    const first = chats[0];
+    if (!first?.contact) return;
+    void openContact(
+      first.contact,
+      first.remoteJid ?? null,
+      first.name ?? null,
+      first.avatarUrl ?? null,
+      first.originInstanceId ?? null,
+      (first as any).originInstanceNumber ?? null,
+      (first as any).originLabel ?? null
+    );
+  }, [chats, openContact, seller]);
  
   const setConversationAgentStatusRemote = useCallback(
     async (value: 'ATIVO' | 'PAUSADO' | 'DESATIVADO') => {
