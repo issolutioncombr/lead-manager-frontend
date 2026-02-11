@@ -7,7 +7,7 @@ import { Modal } from '../../../components/Modal';
 import { StatusBadge } from '../../../components/StatusBadge';
 import api from '../../../lib/api';
 import { useAuth } from '../../../hooks/useAuth';
-import { Appointment, Lead, LeadStatus, MetaAdsConfigResponse, Seller } from '../../../types';
+import { Appointment, Lead, LeadStatus, MetaAdsConfigResponse, MetaAdsIntegration, Seller } from '../../../types';
 
 type AppointmentStatusOption = 'AGENDADA' | 'REMARCADO';
 type LeadSummary = Pick<Lead, 'id' | 'name' | 'email' | 'contact'>;
@@ -46,6 +46,8 @@ export default function AppointmentsPage() {
   const [leadStatuses, setLeadStatuses] = useState<LeadStatus[]>([]);
   const [leadStatusesLoading, setLeadStatusesLoading] = useState(false);
   const [purchaseStageSlugs, setPurchaseStageSlugs] = useState<string[]>([]);
+  const [metaAdsIntegrations, setMetaAdsIntegrations] = useState<MetaAdsIntegration[]>([]);
+  const [metaAdsIntegrationId, setMetaAdsIntegrationId] = useState<string>('');
   const [purchaseValue, setPurchaseValue] = useState('');
   const [purchaseContentName, setPurchaseContentName] = useState('');
   const [leadSearch, setLeadSearch] = useState('');
@@ -159,9 +161,27 @@ export default function AppointmentsPage() {
     }
   }, []);
 
-  const fetchPurchaseStages = useCallback(async () => {
+  const fetchMetaAdsIntegrations = useCallback(async () => {
     try {
-      const { data } = await api.get<MetaAdsConfigResponse>('/integrations/meta-ads');
+      const { data } = await api.get<MetaAdsIntegration[]>('/integrations/meta-ads/integrations');
+      const next = Array.isArray(data) ? data : [];
+      setMetaAdsIntegrations(next);
+      setMetaAdsIntegrationId((prev) => prev || next[0]?.id || '');
+    } catch {
+      setMetaAdsIntegrations([]);
+      setMetaAdsIntegrationId('');
+    }
+  }, []);
+
+  const fetchPurchaseStagesForIntegration = useCallback(async (integrationId?: string) => {
+    if (!integrationId) {
+      setPurchaseStageSlugs([]);
+      return;
+    }
+    try {
+      const { data } = await api.get<MetaAdsConfigResponse>('/integrations/meta-ads', {
+        params: { integrationId }
+      });
       const slugs = (data.mappings ?? [])
         .filter((m) => m.enabled && m.event && m.event.metaEventName.trim().toLowerCase() === 'purchase')
         .map((m) => m.statusSlug);
@@ -192,8 +212,12 @@ export default function AppointmentsPage() {
     hasFetchedInitial.current = true;
     fetchAppointments();
     void fetchLeadStatuses();
-    void fetchPurchaseStages();
-  }, [fetchAppointments, fetchLeadStatuses, fetchPurchaseStages]);
+    void fetchMetaAdsIntegrations();
+  }, [fetchAppointments, fetchLeadStatuses, fetchMetaAdsIntegrations]);
+
+  useEffect(() => {
+    void fetchPurchaseStagesForIntegration(metaAdsIntegrationId);
+  }, [fetchPurchaseStagesForIntegration, metaAdsIntegrationId]);
 
   const isoToLocalInput = (iso: string) => new Date(iso).toISOString().slice(0, 16);
 
@@ -223,6 +247,7 @@ export default function AppointmentsPage() {
     }
     setPurchaseValue('');
     setPurchaseContentName('');
+    setMetaAdsIntegrationId(metaAdsIntegrations[0]?.id ?? '');
     setIsModalOpen(true);
   };
 
@@ -340,18 +365,19 @@ export default function AppointmentsPage() {
 
     if (editingAppointmentId && formState.leadStage) {
       payload.leadStage = formState.leadStage;
+      if (metaAdsIntegrationId) {
+        payload.metaAdsIntegrationId = metaAdsIntegrationId;
+      }
       if (purchaseStageSlugs.includes(formState.leadStage)) {
         const valueNumber = Number(purchaseValue);
         if (!purchaseValue || Number.isNaN(valueNumber) || valueNumber <= 0) {
           setError('Informe um value valido para Purchase (ex: 297.00).');
           return;
         }
-        if (!purchaseContentName.trim()) {
-          setError('Informe o content_name para Purchase (ex: Tratamento Alopecia).');
-          return;
-        }
         payload.purchaseValue = valueNumber;
-        payload.purchaseContentName = purchaseContentName.trim();
+        if (purchaseContentName.trim()) {
+          payload.purchaseContentName = purchaseContentName.trim();
+        }
       }
     }
 
@@ -855,6 +881,23 @@ export default function AppointmentsPage() {
               </select>
             </label>
           )}
+
+          {editingAppointmentId && formState.leadStage ? (
+            <label className="text-sm md:col-span-2">
+              Integracao Meta ADS
+              <select
+                value={metaAdsIntegrationId}
+                onChange={(event) => setMetaAdsIntegrationId(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
+              >
+                {metaAdsIntegrations.map((i) => (
+                  <option key={i.id} value={i.id}>
+                    {i.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
 
           {editingAppointmentId && formState.leadStage && purchaseStageSlugs.includes(formState.leadStage) ? (
             <>

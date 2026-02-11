@@ -6,7 +6,7 @@ import { ConfirmDialog } from '../../../components/ConfirmDialog';
 import { Modal } from '../../../components/Modal';
 import { StatusBadge } from '../../../components/StatusBadge';
 import api from '../../../lib/api';
-import { Lead, LeadStatus, MetaAdsConfigResponse } from '../../../types';
+import { Lead, LeadStatus, MetaAdsConfigResponse, MetaAdsIntegration } from '../../../types';
 
 interface LeadsResponse {
   data: Lead[];
@@ -22,6 +22,8 @@ export default function LeadsPage() {
   const [leadStatuses, setLeadStatuses] = useState<LeadStatus[]>([]);
   const [leadStatusesLoading, setLeadStatusesLoading] = useState(true);
   const [purchaseStageSlugs, setPurchaseStageSlugs] = useState<string[]>([]);
+  const [metaAdsIntegrations, setMetaAdsIntegrations] = useState<MetaAdsIntegration[]>([]);
+  const [metaAdsIntegrationId, setMetaAdsIntegrationId] = useState<string>('');
   const [purchaseValue, setPurchaseValue] = useState('');
   const [purchaseContentName, setPurchaseContentName] = useState('');
   const [total, setTotal] = useState(0);
@@ -127,9 +129,27 @@ export default function LeadsPage() {
     }
   }, []);
 
-  const fetchPurchaseStages = useCallback(async () => {
+  const fetchMetaAdsIntegrations = useCallback(async () => {
     try {
-      const { data } = await api.get<MetaAdsConfigResponse>('/integrations/meta-ads');
+      const { data } = await api.get<MetaAdsIntegration[]>('/integrations/meta-ads/integrations');
+      const next = Array.isArray(data) ? data : [];
+      setMetaAdsIntegrations(next);
+      setMetaAdsIntegrationId((prev) => prev || next[0]?.id || '');
+    } catch {
+      setMetaAdsIntegrations([]);
+      setMetaAdsIntegrationId('');
+    }
+  }, []);
+
+  const fetchPurchaseStagesForIntegration = useCallback(async (integrationId?: string) => {
+    if (!integrationId) {
+      setPurchaseStageSlugs([]);
+      return;
+    }
+    try {
+      const { data } = await api.get<MetaAdsConfigResponse>('/integrations/meta-ads', {
+        params: { integrationId }
+      });
       const slugs = (data.mappings ?? [])
         .filter((m) => m.enabled && m.event && m.event.metaEventName.trim().toLowerCase() === 'purchase')
         .map((m) => m.statusSlug);
@@ -145,9 +165,13 @@ export default function LeadsPage() {
     }
     hasFetchedInitial.current = true;
     void fetchLeadStatuses();
-    void fetchPurchaseStages();
+    void fetchMetaAdsIntegrations();
     fetchLeads();
-  }, [fetchLeads, fetchLeadStatuses, fetchPurchaseStages]);
+  }, [fetchLeads, fetchLeadStatuses, fetchMetaAdsIntegrations]);
+
+  useEffect(() => {
+    void fetchPurchaseStagesForIntegration(metaAdsIntegrationId);
+  }, [fetchPurchaseStagesForIntegration, metaAdsIntegrationId]);
 
   useEffect(() => {
     if (!leadStatuses.length) return;
@@ -259,6 +283,7 @@ export default function LeadsPage() {
     }
     setPurchaseValue('');
     setPurchaseContentName('');
+    setMetaAdsIntegrationId(metaAdsIntegrations[0]?.id ?? '');
     setIsModalOpen(true);
   };
 
@@ -269,18 +294,19 @@ export default function LeadsPage() {
       if (editingLeadId) {
         const isPurchaseStage = purchaseStageSlugs.includes(formState.stage);
         const payload: Record<string, unknown> = { ...formState };
+        if (metaAdsIntegrationId) {
+          payload.metaAdsIntegrationId = metaAdsIntegrationId;
+        }
         if (isPurchaseStage) {
           const valueNumber = Number(purchaseValue);
           if (!purchaseValue || Number.isNaN(valueNumber) || valueNumber <= 0) {
             setError('Informe um value valido para Purchase (ex: 297.00).');
             return;
           }
-          if (!purchaseContentName.trim()) {
-            setError('Informe o content_name para Purchase (ex: Tratamento Alopecia).');
-            return;
-          }
           payload.purchaseValue = valueNumber;
-          payload.purchaseContentName = purchaseContentName.trim();
+          if (purchaseContentName.trim()) {
+            payload.purchaseContentName = purchaseContentName.trim();
+          }
         }
         await api.patch(`/leads/${editingLeadId}`, payload);
       } else {
@@ -657,6 +683,23 @@ export default function LeadsPage() {
               ))}
             </select>
           </label>
+
+          {editingLeadId ? (
+            <label className="text-sm">
+              Integracao Meta ADS
+              <select
+                value={metaAdsIntegrationId}
+                onChange={(event) => setMetaAdsIntegrationId(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
+              >
+                {metaAdsIntegrations.map((i) => (
+                  <option key={i.id} value={i.id}>
+                    {i.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
 
           {editingLeadId && purchaseStageSlugs.includes(formState.stage) ? (
             <>

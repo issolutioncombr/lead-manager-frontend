@@ -81,11 +81,14 @@ export interface LeadStatus {
 
 export interface MetaAdsIntegration {
   id: string;
+  name: string;
   enabled: boolean;
   n8nWebhookUrl?: string | null;
   accessToken?: string | null;
   pixelId?: string | null;
   testEventCode?: string | null;
+  defaultContentName?: string | null;
+  defaultContentCategory?: string | null;
   createdAt: string;
   updatedAt: string;
 }

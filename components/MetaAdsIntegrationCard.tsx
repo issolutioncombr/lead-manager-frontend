@@ -3,7 +3,8 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 
 import api from '../lib/api';
-import { LeadStatus, MetaAdsConfigResponse, MetaAdsEvent, MetaAdsStatusMapping } from '../types';
+import { Modal } from './Modal';
+import { LeadStatus, MetaAdsConfigResponse, MetaAdsEvent, MetaAdsIntegration, MetaAdsStatusMapping } from '../types';
 
 type MappingDraft = Record<string, { eventId: string; enabled: boolean }>;
 
@@ -12,31 +13,63 @@ export function MetaAdsIntegrationCard() {
   const [savingConfig, setSavingConfig] = useState(false);
   const [savingMappings, setSavingMappings] = useState(false);
   const [creatingEvent, setCreatingEvent] = useState(false);
+  const [creatingIntegration, setCreatingIntegration] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [config, setConfig] = useState<MetaAdsConfigResponse | null>(null);
+
+  const [integrations, setIntegrations] = useState<MetaAdsIntegration[]>([]);
+  const [selectedIntegrationId, setSelectedIntegrationId] = useState<string>('');
+  const [isCreateIntegrationOpen, setIsCreateIntegrationOpen] = useState(false);
 
   const [enabled, setEnabled] = useState(false);
   const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
   const [pixelId, setPixelId] = useState('');
   const [accessToken, setAccessToken] = useState('');
   const [testEventCode, setTestEventCode] = useState('');
+  const [defaultContentName, setDefaultContentName] = useState('');
+  const [defaultContentCategory, setDefaultContentCategory] = useState('');
+
+  const [newIntegrationName, setNewIntegrationName] = useState('');
+  const [newIntegrationWebhookUrl, setNewIntegrationWebhookUrl] = useState('');
+  const [newIntegrationPixelId, setNewIntegrationPixelId] = useState('');
+  const [newIntegrationAccessToken, setNewIntegrationAccessToken] = useState('');
+  const [newIntegrationTestEventCode, setNewIntegrationTestEventCode] = useState('');
+  const [newIntegrationContentName, setNewIntegrationContentName] = useState('');
+  const [newIntegrationContentCategory, setNewIntegrationContentCategory] = useState('');
 
   const [eventName, setEventName] = useState('');
   const [metaEventName, setMetaEventName] = useState('');
 
   const [mappingDraft, setMappingDraft] = useState<MappingDraft>({});
 
-  const fetchConfig = useCallback(async () => {
+  const fetchIntegrations = useCallback(async () => {
+    try {
+      const { data } = await api.get<MetaAdsIntegration[]>('/integrations/meta-ads/integrations');
+      const next = Array.isArray(data) ? data : [];
+      setIntegrations(next);
+      if (!selectedIntegrationId && next.length) {
+        setSelectedIntegrationId(next[0].id);
+      }
+    } catch {
+      setIntegrations([]);
+    }
+  }, [selectedIntegrationId]);
+
+  const fetchConfig = useCallback(async (integrationId?: string) => {
     setLoading(true);
     setError(null);
     try {
-      const { data } = await api.get<MetaAdsConfigResponse>('/integrations/meta-ads');
+      const { data } = await api.get<MetaAdsConfigResponse>('/integrations/meta-ads', {
+        params: { integrationId: integrationId || undefined }
+      });
       setConfig(data);
       setEnabled(Boolean(data.integration.enabled));
       setN8nWebhookUrl(data.integration.n8nWebhookUrl ?? '');
       setPixelId(data.integration.pixelId ?? '');
       setAccessToken(data.integration.accessToken ?? '');
       setTestEventCode(data.integration.testEventCode ?? '');
+      setDefaultContentName(data.integration.defaultContentName ?? '');
+      setDefaultContentCategory(data.integration.defaultContentCategory ?? '');
 
       const nextDraft: MappingDraft = {};
       (data.mappings ?? []).forEach((m) => {
@@ -52,8 +85,12 @@ export function MetaAdsIntegrationCard() {
   }, []);
 
   useEffect(() => {
-    void fetchConfig();
-  }, [fetchConfig]);
+    void fetchIntegrations();
+  }, [fetchIntegrations]);
+
+  useEffect(() => {
+    void fetchConfig(selectedIntegrationId || undefined);
+  }, [fetchConfig, selectedIntegrationId]);
 
   const events = useMemo(() => config?.events ?? [], [config?.events]);
   const statuses = useMemo(() => config?.statuses ?? [], [config?.statuses]);
@@ -80,14 +117,21 @@ export function MetaAdsIntegrationCard() {
     setSavingConfig(true);
     setError(null);
     try {
-      await api.patch('/integrations/meta-ads', {
-        enabled,
-        n8nWebhookUrl: n8nWebhookUrl || null,
-        pixelId: pixelId || null,
-        accessToken: accessToken || null,
-        testEventCode: testEventCode || null
-      });
-      await fetchConfig();
+      await api.patch(
+        '/integrations/meta-ads',
+        {
+          enabled,
+          n8nWebhookUrl: n8nWebhookUrl || null,
+          pixelId: pixelId || null,
+          accessToken: accessToken || null,
+          testEventCode: testEventCode || null,
+          defaultContentName: defaultContentName || null,
+          defaultContentCategory: defaultContentCategory || null
+        },
+        { params: { integrationId: selectedIntegrationId || undefined } }
+      );
+      await fetchConfig(selectedIntegrationId || undefined);
+      await fetchIntegrations();
     } catch {
       setError('Nao foi possivel salvar a configuracao.');
     } finally {
@@ -101,10 +145,14 @@ export function MetaAdsIntegrationCard() {
     setCreatingEvent(true);
     setError(null);
     try {
-      await api.post('/integrations/meta-ads/events', { name: eventName.trim(), metaEventName: metaEventName.trim() });
+      await api.post(
+        '/integrations/meta-ads/events',
+        { name: eventName.trim(), metaEventName: metaEventName.trim() },
+        { params: { integrationId: selectedIntegrationId || undefined } }
+      );
       setEventName('');
       setMetaEventName('');
-      await fetchConfig();
+      await fetchConfig(selectedIntegrationId || undefined);
     } catch {
       setError('Nao foi possivel criar o evento.');
     } finally {
@@ -115,8 +163,8 @@ export function MetaAdsIntegrationCard() {
   const removeEvent = async (ev: MetaAdsEvent) => {
     setError(null);
     try {
-      await api.delete(`/integrations/meta-ads/events/${ev.id}`);
-      await fetchConfig();
+      await api.delete(`/integrations/meta-ads/events/${ev.id}`, { params: { integrationId: selectedIntegrationId || undefined } });
+      await fetchConfig(selectedIntegrationId || undefined);
     } catch {
       setError('Nao foi possivel remover o evento.');
     }
@@ -130,12 +178,60 @@ export function MetaAdsIntegrationCard() {
         .filter(([, v]) => Boolean(v?.eventId))
         .map(([statusSlug, v]) => ({ statusSlug, eventId: v.eventId, enabled: v.enabled }));
 
-      await api.post('/integrations/meta-ads/mappings', { items });
-      await fetchConfig();
+      await api.post('/integrations/meta-ads/mappings', { items }, { params: { integrationId: selectedIntegrationId || undefined } });
+      await fetchConfig(selectedIntegrationId || undefined);
     } catch {
       setError('Nao foi possivel salvar os vinculos.');
     } finally {
       setSavingMappings(false);
+    }
+  };
+
+  const createIntegration = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!newIntegrationName.trim()) return;
+    setCreatingIntegration(true);
+    setError(null);
+    try {
+      const { data } = await api.post<MetaAdsIntegration>('/integrations/meta-ads/integrations', {
+        name: newIntegrationName.trim(),
+        enabled: true,
+        n8nWebhookUrl: newIntegrationWebhookUrl.trim() || null,
+        pixelId: newIntegrationPixelId.trim() || null,
+        accessToken: newIntegrationAccessToken.trim() || null,
+        testEventCode: newIntegrationTestEventCode.trim() || null,
+        defaultContentName: newIntegrationContentName.trim() || null,
+        defaultContentCategory: newIntegrationContentCategory.trim() || null
+      });
+      setIsCreateIntegrationOpen(false);
+      setNewIntegrationName('');
+      setNewIntegrationWebhookUrl('');
+      setNewIntegrationPixelId('');
+      setNewIntegrationAccessToken('');
+      setNewIntegrationTestEventCode('');
+      setNewIntegrationContentName('');
+      setNewIntegrationContentCategory('');
+      await fetchIntegrations();
+      setSelectedIntegrationId(data.id);
+    } catch {
+      setError('Nao foi possivel criar a integracao.');
+    } finally {
+      setCreatingIntegration(false);
+    }
+  };
+
+  const removeIntegration = async () => {
+    if (!selectedIntegrationId) return;
+    if (integrations.length <= 1) return;
+    if (!window.confirm('Deseja remover esta integracao Meta ADS? Essa acao nao pode ser desfeita.')) return;
+    setError(null);
+    try {
+      await api.delete(`/integrations/meta-ads/integrations/${selectedIntegrationId}`);
+      await fetchIntegrations();
+      const next = integrations.filter((i) => i.id !== selectedIntegrationId);
+      setSelectedIntegrationId(next[0]?.id ?? '');
+    } catch {
+      setError('Nao foi possivel remover a integracao.');
     }
   };
 
@@ -163,6 +259,34 @@ export function MetaAdsIntegrationCard() {
         <div>
           <h2 className="text-lg font-semibold text-slate-900">Meta ADS</h2>
           <p className="text-sm text-gray-500">Configure token/pixel, eventos e vincule eventos a status.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={selectedIntegrationId}
+            onChange={(e) => setSelectedIntegrationId(e.target.value)}
+            className="h-10 min-w-[14rem] rounded-lg border border-gray-200 bg-white px-3 text-sm focus:border-primary focus:outline-none"
+          >
+            {integrations.map((i) => (
+              <option key={i.id} value={i.id}>
+                {i.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => setIsCreateIntegrationOpen(true)}
+            className="h-10 rounded-lg border border-primary px-4 text-sm font-semibold text-primary transition hover:bg-primary/10"
+          >
+            Nova integracao
+          </button>
+          <button
+            type="button"
+            disabled={integrations.length <= 1}
+            onClick={() => void removeIntegration()}
+            className="h-10 rounded-lg border border-red-200 px-4 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400"
+          >
+            Remover
+          </button>
         </div>
       </div>
 
@@ -216,6 +340,26 @@ export function MetaAdsIntegrationCard() {
                   value={testEventCode}
                   onChange={(e) => setTestEventCode(e.target.value)}
                   placeholder="TEST123"
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
+                />
+              </label>
+
+              <label className="text-sm">
+                Content name (padrao)
+                <input
+                  value={defaultContentName}
+                  onChange={(e) => setDefaultContentName(e.target.value)}
+                  placeholder="Call Avaliacao"
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
+                />
+              </label>
+
+              <label className="text-sm md:col-span-2">
+                Content category (padrao)
+                <input
+                  value={defaultContentCategory}
+                  onChange={(e) => setDefaultContentCategory(e.target.value)}
+                  placeholder="High Ticket Service"
                   className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
                 />
               </label>
@@ -346,6 +490,93 @@ export function MetaAdsIntegrationCard() {
           </div>
         </div>
       )}
+
+      <Modal
+        title="Nova integracao Meta ADS"
+        isOpen={isCreateIntegrationOpen}
+        onClose={() => setIsCreateIntegrationOpen(false)}
+      >
+        <form onSubmit={createIntegration} className="grid gap-3">
+          <label className="text-sm">
+            Nome
+            <input
+              value={newIntegrationName}
+              onChange={(e) => setNewIntegrationName(e.target.value)}
+              placeholder="Ex: Pixel Clinica A"
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
+            />
+          </label>
+
+          <label className="text-sm">
+            Webhook
+            <input
+              value={newIntegrationWebhookUrl}
+              onChange={(e) => setNewIntegrationWebhookUrl(e.target.value)}
+              placeholder="https://.../webhook/..."
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
+            />
+          </label>
+
+          <label className="text-sm">
+            Pixel ID
+            <input
+              value={newIntegrationPixelId}
+              onChange={(e) => setNewIntegrationPixelId(e.target.value)}
+              placeholder="1297769298779390"
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
+            />
+          </label>
+
+          <label className="text-sm">
+            Access Token
+            <input
+              type="password"
+              value={newIntegrationAccessToken}
+              onChange={(e) => setNewIntegrationAccessToken(e.target.value)}
+              placeholder="EAAB..."
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
+            />
+          </label>
+
+          <label className="text-sm">
+            Test Event Code (opcional)
+            <input
+              value={newIntegrationTestEventCode}
+              onChange={(e) => setNewIntegrationTestEventCode(e.target.value)}
+              placeholder="TEST123"
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
+            />
+          </label>
+
+          <label className="text-sm">
+            Content name (padrao)
+            <input
+              value={newIntegrationContentName}
+              onChange={(e) => setNewIntegrationContentName(e.target.value)}
+              placeholder="Call Avaliacao"
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
+            />
+          </label>
+
+          <label className="text-sm">
+            Content category (padrao)
+            <input
+              value={newIntegrationContentCategory}
+              onChange={(e) => setNewIntegrationContentCategory(e.target.value)}
+              placeholder="High Ticket Service"
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
+            />
+          </label>
+
+          <button
+            type="submit"
+            disabled={creatingIntegration || !newIntegrationName.trim()}
+            className="w-fit rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {creatingIntegration ? 'Criando...' : 'Criar integracao'}
+          </button>
+        </form>
+      </Modal>
     </div>
   );
 }
