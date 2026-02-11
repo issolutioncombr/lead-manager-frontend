@@ -48,6 +48,7 @@ const BASE_ITEMS: NavItem[] = [
     children: [
       { href: '/bot-controls', label: 'Botões e Webhooks' },
       { href: '/agent-prompt', label: 'Prompt do agente' },
+      { href: '/prompts/manual', label: 'Prompt Manual' },
       { href: '/agent-prompt/reports', label: 'Relatórios Prompt' },
       { href: '/bot-actions', label: 'Acionar Botões' }
     ]
@@ -252,6 +253,11 @@ export const Navbar = () => {
       items.push(attendanceLink);
     }
 
+    const normalizedRole = String(user?.role ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '');
+    const isSuperAdmin = normalizedRole === 'superadmin';
     const isAdmin = user?.isAdmin || user?.role === 'admin';
     const configIndex = items.findIndex((item) => item.type === 'group' && item.label === 'Configurações');
     if (isAdmin && configIndex >= 0) {
@@ -259,6 +265,13 @@ export const Navbar = () => {
       if (configItem.type === 'group') {
         configItem.children.push({ href: '/approvals', label: 'Aprovações' });
         configItem.children.push({ href: '/users', label: 'Usuários' });
+      }
+    }
+
+    if (isSuperAdmin && configIndex >= 0) {
+      const configItem = items[configIndex];
+      if (configItem.type === 'group') {
+        configItem.children.push({ href: '/admin', label: 'Admin (Super)' });
       }
     }
 

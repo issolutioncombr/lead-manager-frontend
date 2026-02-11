@@ -13,10 +13,21 @@ export const useRoleGuard = (allowedRoles: string[], redirectTo = '/dashboard') 
     if (!user?.role) {
       return false;
     }
-    if (user.isAdmin && allowedRoles.includes('admin')) {
+    const normalizedAllowed = allowedRoles.map((r) =>
+      String(r ?? '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '')
+    );
+    const normalizedRole = String(user.role)
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '');
+
+    if (user.isAdmin && normalizedAllowed.includes('admin')) {
       return true;
     }
-    return allowedRoles.includes(user.role);
+    return normalizedAllowed.includes(normalizedRole);
   }, [allowedRoles, user?.role, user?.isAdmin]);
 
   useEffect(() => {

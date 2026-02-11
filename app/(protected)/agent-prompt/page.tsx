@@ -11,8 +11,10 @@ const HIDE_AGENT_PROMPT_TEXT = (process.env.NEXT_PUBLIC_HIDE_AGENT_PROMPT_TEXT ?
 type PromptItem = {
   id: string;
   name: string | null;
-  prompt: string;
+  prompt: string | null;
   active: boolean;
+  promptType?: string;
+  version?: number;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -27,7 +29,12 @@ type InstancePromptLinkItem = {
 export default function AgentPromptPage() {
   const maxStoredPromptLength = 100000;
   const router = useRouter();
-  const { seller, loading: authLoading } = useAuth();
+  const { seller, user, loading: authLoading } = useAuth();
+  const isSuperAdmin =
+    String(user?.role ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '') === 'superadmin';
   const [instances, setInstances] = useState<Array<{ id: string; name: string }>>([]);
   const [selectedInstanceId, setSelectedInstanceId] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
@@ -194,6 +201,11 @@ export default function AgentPromptPage() {
   }, [editingPromptId, library, promptName]);
 
   const startNewPrompt = () => {
+    if (!isSuperAdmin) {
+      setError('Apenas Super-Admin pode criar prompts por texto.');
+      setSuccessMessage(null);
+      return;
+    }
     setEditingPromptId(null);
     setPromptName('');
     setPromptText('');
@@ -202,9 +214,14 @@ export default function AgentPromptPage() {
   };
 
   const startEditPrompt = (p: PromptItem) => {
+    if (!isSuperAdmin) {
+      setError('Apenas Super-Admin pode editar prompts por texto.');
+      setSuccessMessage(null);
+      return;
+    }
     setEditingPromptId(p.id);
     setPromptName(p.name ?? '');
-    setPromptText(HIDE_AGENT_PROMPT_TEXT ? '' : (p.prompt ?? ''));
+    setPromptText(p.prompt ?? '');
     setError(null);
     setSuccessMessage(null);
   };
@@ -221,6 +238,11 @@ export default function AgentPromptPage() {
 
   const savePrompt = async (event: FormEvent) => {
     event.preventDefault();
+    if (!isSuperAdmin) {
+      setError('Apenas Super-Admin pode criar/editar prompts por texto.');
+      setSuccessMessage(null);
+      return;
+    }
     if (HIDE_AGENT_PROMPT_TEXT) {
       setError('Visualização e edição de prompts está desabilitada temporariamente.');
       setSuccessMessage(null);
@@ -266,6 +288,11 @@ export default function AgentPromptPage() {
   };
 
   const deletePrompt = async (id: string) => {
+    if (!isSuperAdmin) {
+      setError('Apenas Super-Admin pode remover prompts.');
+      setSuccessMessage(null);
+      return;
+    }
     if (isDeletingPromptId) return;
     setIsDeletingPromptId(id);
     setError(null);
@@ -521,14 +548,16 @@ export default function AgentPromptPage() {
         <div className="space-y-4 rounded-lg border bg-white p-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-slate-900">Biblioteca de prompts</h2>
-            <button
-              type="button"
-              onClick={startNewPrompt}
-              className="rounded-lg border px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={HIDE_AGENT_PROMPT_TEXT}
-            >
-              Novo prompt
-            </button>
+            {isSuperAdmin ? (
+              <button
+                type="button"
+                onClick={startNewPrompt}
+                className="rounded-lg border px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={HIDE_AGENT_PROMPT_TEXT}
+              >
+                Novo prompt
+              </button>
+            ) : null}
           </div>
 
           {isLoadingLibrary ? (
@@ -543,19 +572,21 @@ export default function AgentPromptPage() {
                     type="button"
                     onClick={() => startEditPrompt(p)}
                     className="min-w-0 flex-1 text-left disabled:cursor-not-allowed disabled:opacity-60"
-                    disabled={HIDE_AGENT_PROMPT_TEXT}
+                    disabled={HIDE_AGENT_PROMPT_TEXT || !isSuperAdmin}
                   >
                     <div className="truncate text-sm font-semibold text-slate-900">{p.name ?? `Prompt ${p.id.slice(0, 6)}`}</div>
-                    <div className="truncate text-xs text-gray-500">{HIDE_AGENT_PROMPT_TEXT ? 'Conteúdo oculto.' : p.prompt}</div>
+                    <div className="truncate text-xs text-gray-500">{HIDE_AGENT_PROMPT_TEXT || !p.prompt ? 'Conteúdo oculto.' : p.prompt}</div>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => deletePrompt(p.id)}
-                    disabled={isDeletingPromptId === p.id}
-                    className="rounded-md border px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {isDeletingPromptId === p.id ? 'Excluindo...' : 'Excluir'}
-                  </button>
+                  {isSuperAdmin ? (
+                    <button
+                      type="button"
+                      onClick={() => deletePrompt(p.id)}
+                      disabled={isDeletingPromptId === p.id}
+                      className="rounded-md border px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {isDeletingPromptId === p.id ? 'Excluindo...' : 'Excluir'}
+                    </button>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -575,7 +606,7 @@ export default function AgentPromptPage() {
                   setSuccessMessage(null);
                 }}
                 className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-primary focus:outline-none"
-                disabled={isSavingLibrary || HIDE_AGENT_PROMPT_TEXT}
+                disabled={isSavingLibrary || HIDE_AGENT_PROMPT_TEXT || !isSuperAdmin}
               />
               {duplicatePromptNameMessage && <div className="mt-1 text-xs text-red-700">{duplicatePromptNameMessage}</div>}
             </label>
@@ -595,7 +626,7 @@ export default function AgentPromptPage() {
                   }}
                   rows={8}
                   className="mt-1 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700 shadow focus:border-primary focus:outline-none"
-                  disabled={isSavingLibrary}
+                  disabled={isSavingLibrary || !isSuperAdmin}
                 />
               )}
             </label>
@@ -608,7 +639,7 @@ export default function AgentPromptPage() {
                   <button
                     type="button"
                     onClick={startNewPrompt}
-                    disabled={isSavingLibrary || HIDE_AGENT_PROMPT_TEXT}
+                    disabled={isSavingLibrary || HIDE_AGENT_PROMPT_TEXT || !isSuperAdmin}
                     className="rounded-lg border px-4 py-2 font-semibold text-slate-900 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Cancelar
@@ -619,6 +650,7 @@ export default function AgentPromptPage() {
                   disabled={
                     isSavingLibrary ||
                     HIDE_AGENT_PROMPT_TEXT ||
+                    !isSuperAdmin ||
                     !promptText.trim() ||
                     promptText.trim().length > maxStoredPromptLength ||
                     !!duplicatePromptNameMessage
