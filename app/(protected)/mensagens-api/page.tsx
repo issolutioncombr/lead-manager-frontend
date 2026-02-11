@@ -10,6 +10,15 @@ import { Composer } from '../../../components/mensagens-api/Composer';
 import { MessagesList } from '../../../components/mensagens-api/MessagesList';
 import type { ChatItem, Message, RenderedMessageItem } from '../../../components/mensagens-api/types';
  
+const isPlainObject = (value: unknown): value is Record<string, unknown> => {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+};
+
+const isMessagePayload = (value: unknown): value is Message => {
+  if (!isPlainObject(value)) return false;
+  return typeof value.id === 'string' && typeof value.timestamp === 'string' && typeof value.fromMe === 'boolean';
+};
+
  export default function MensagensApiPage() {
    const searchParams = useSearchParams();
    const [instanceId, setInstanceId] = useState<string>('');
@@ -118,7 +127,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
       }
       setSelectedOriginInstanceId(id);
       const match = instances.find((i) => i.id === id);
-      setSelectedOriginLabel((match?.name ?? id) as any);
+      setSelectedOriginLabel(match?.name ?? id);
     },
     [instances, resetConversationView]
   );
@@ -154,10 +163,13 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
         'timestamp',
         'updatedAt'
       ];
+      const copyFromPrev = <K extends keyof Message>(field: K) => {
+        merged[field] = prev[field];
+      };
       for (const field of preserveIfNull) {
-        const nextValue = (m as any)[field];
+        const nextValue = m[field];
         if (nextValue === null || nextValue === undefined || nextValue === '') {
-          (merged as any)[field] = (prev as any)[field];
+          copyFromPrev(field);
         }
       }
       byKey.set(key, merged);
@@ -167,7 +179,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
     return out;
   }, [messageKey]);
 
-  const buildApiUrl = useCallback((path: string, params?: Record<string, string>) => {
+  const buildApiUrl = useCallback((path: string, params?: Record<string, string | number | null | undefined>) => {
     const base = (api.defaults.baseURL ?? '').replace(/\/+$/, '');
     const url = new URL(`${base}${path.startsWith('/') ? path : `/${path}`}`);
     for (const [k, v] of Object.entries(params ?? {})) {
@@ -298,7 +310,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
       afterTimestamp: cursor.lastTimestamp,
       afterUpdatedAt: cursor.lastUpdatedAt,
       limit: '200',
-      instanceId: effectiveInstanceId as any
+      instanceId: effectiveInstanceId || undefined
     });
 
     const headers: Record<string, string> = { Authorization: `Bearer ${token}`, 'x-request-id': newRequestId() };
@@ -324,8 +336,10 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
       eventType = null;
       if (type === 'keepalive') return;
       try {
-        const parsed = JSON.parse(raw) as any;
-        applyIncomingMessages(phone, [parsed]);
+        const parsed = JSON.parse(raw) as unknown;
+        if (isMessagePayload(parsed)) {
+          applyIncomingMessages(phone, [parsed]);
+        }
       } catch {
         return;
       }
@@ -361,17 +375,20 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
      const loadInstances = async () => {
        try {
          const resp = await api.get('/integrations/evolution/instances/list');
-         const list = Array.isArray(resp.data) ? resp.data : [];
+        const list = Array.isArray(resp.data) ? (resp.data as unknown[]) : [];
+        const readString = (v: unknown) => (typeof v === 'string' && v.trim().length > 0 ? v.trim() : null);
         setInstances(
           list
-            .map((x: any) => ({
-              id: x.providerInstanceId ?? x.instanceId ?? '',
-              providerInstanceId: x.providerInstanceId ?? null,
-              internalInstanceId: x.instanceId ?? null,
-              name: x.number ?? x.name ?? x.instanceId ?? null,
-              profilePicUrl: x.profilePicUrl ?? null
-            }))
-            .filter((x: any) => typeof x.id === 'string' && x.id.length > 0)
+            .map((item) => {
+              const x = isPlainObject(item) ? item : {};
+              const providerInstanceId = readString(x.providerInstanceId) ?? null;
+              const internalInstanceId = readString(x.instanceId) ?? null;
+              const id = providerInstanceId ?? internalInstanceId ?? '';
+              const name = readString(x.number) ?? readString(x.name) ?? internalInstanceId ?? null;
+              const profilePicUrl = readString(x.profilePicUrl) ?? null;
+              return { id, providerInstanceId, internalInstanceId, name, profilePicUrl };
+            })
+            .filter((x) => typeof x.id === 'string' && x.id.length > 0)
         );
        } catch {}
      };
@@ -383,7 +400,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
      try {
        setIsLoadingChats(true);
        setError(null);
-       const params: Record<string, any> = {};
+      const params: Record<string, string | number> = {};
       const source = preferLocal ? 'local' : 'provider';
       const effectiveInstanceId = instanceId ? (source === 'local' ? resolveInstanceIdForLocal(instanceId) : resolveInstanceIdForProvider(instanceId)) : '';
       if (effectiveInstanceId) params.instanceId = effectiveInstanceId;
@@ -405,7 +422,8 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
       setChats(data);
      } catch (e) {
        if (reqSeq !== chatsRequestSeqRef.current) return;
-       const status = (e as any)?.response?.status;
+      const err = e as { response?: { status?: unknown } };
+      const status = typeof err?.response?.status === 'number' ? err.response.status : null;
       setError(`Não foi possível carregar as conversas${status ? ` (código ${status})` : ''}.`);
      } finally {
        if (reqSeq === chatsRequestSeqRef.current) {
@@ -499,7 +517,8 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
        );
       return resp.data;
      } catch (e) {
-       const status = (e as any)?.response?.status;
+       const err = e as { response?: { status?: unknown } };
+       const status = typeof err?.response?.status === 'number' ? err.response.status : null;
       setError(`Não foi possível carregar a conversa${status ? ` (código ${status})` : ''}.`);
      } finally {
      }
@@ -538,7 +557,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
         return directionFilter === 'outbound' ? isOut : !isOut;
       };
       const optimistic = curr.filter((m) => isClient(m) && (m.phoneRaw ?? '') === phone && matchesDirection(m));
-      const merged = mergeMessages(curr, data as Message[]);
+      const merged = mergeMessages(curr, data);
       return mergeMessages(merged, optimistic);
     });
     if (data.length) {
@@ -556,8 +575,8 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
       const lastTs = data[data.length - 1]?.timestamp ?? null;
       const lastUpdatedAt = (() => {
         let maxIso = lastTs ? new Date(lastTs).toISOString() : new Date(0).toISOString();
-        for (const m of data as any[]) {
-          const u = m?.updatedAt ?? null;
+        for (const m of data) {
+          const u = m.updatedAt ?? null;
           if (!u) continue;
           const a = new Date(maxIso).getTime();
           const b = new Date(u).getTime();
@@ -574,10 +593,10 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
     if (!instanceIdRef.current) {
       const originIds = new Set<string>();
       const originLabels: string[] = [];
-      for (const m of data as any[]) {
-        const id = String(m?.originInstanceId ?? '').trim();
+      for (const m of data) {
+        const id = String(m.originInstanceId ?? '').trim();
         if (id) originIds.add(id);
-        const lbl = String(m?.originNumber ?? m?.originInstanceId ?? '').trim();
+        const lbl = String(m.originNumber ?? m.originInstanceId ?? '').trim();
         if (lbl) originLabels.push(lbl);
       }
       if (originIds.size > 1) {
@@ -670,12 +689,12 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
       setSelectedName((name ?? '').trim() ? (name ?? null) : null);
       const effectiveInstanceId = (instanceIdRef.current ?? '').toString().trim();
       if (!effectiveInstanceId) {
-        setSelectedOriginInstanceId((originInstanceId ?? null) as any);
-        setSelectedOriginLabel((originNumber ?? originLabel ?? originInstanceId ?? 'todas instâncias') as any);
+        setSelectedOriginInstanceId(originInstanceId ?? null);
+        setSelectedOriginLabel(originNumber ?? originLabel ?? originInstanceId ?? 'todas instâncias');
       } else {
         setSelectedOriginInstanceId(effectiveInstanceId);
         const match = instances.find((i) => i.id === effectiveInstanceId);
-        setSelectedOriginLabel((match?.name ?? effectiveInstanceId) as any);
+        setSelectedOriginLabel(match?.name ?? effectiveInstanceId);
       }
       setMessages([]);
       setConversationLimit(50);
@@ -726,21 +745,34 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
     ])
       .then(([linksResp, assignResp]) => {
         if (!active) return;
-        const links = Array.isArray((linksResp.data as any)?.links) ? (linksResp.data as any).links : [];
+        const linksPayload = linksResp.data as unknown;
+        const links = (isPlainObject(linksPayload) && Array.isArray(linksPayload.links)) ? linksPayload.links : [];
         const options = links
-          .filter((l: any) => l?.active !== false && l?.prompt?.active !== false)
-          .map((l: any) => {
-            const pct = typeof l?.percent === 'number' ? l.percent : 0;
-            const name = (l?.prompt?.name ?? '').toString().trim();
-            const labelBase = name || `Prompt ${String(l?.promptId ?? '').slice(0, 6)}`;
-            const label = `${labelBase} (${pct.toFixed(2).replace(/\.00$/, '')}%)`;
-            return { id: String(l?.promptId ?? ''), label };
+          .filter((l) => {
+            if (!isPlainObject(l)) return false;
+            const prompt = isPlainObject(l.prompt) ? l.prompt : null;
+            const activeFlag = l.active;
+            const promptActiveFlag = prompt?.active;
+            return activeFlag !== false && promptActiveFlag !== false;
           })
-          .filter((o: any) => typeof o.id === 'string' && o.id.length > 0);
+          .map((l) => {
+            const obj = isPlainObject(l) ? l : {};
+            const prompt = isPlainObject(obj.prompt) ? obj.prompt : {};
+            const pct = typeof obj.percent === 'number' ? obj.percent : 0;
+            const name = (typeof prompt.name === 'string' ? prompt.name : '').toString().trim();
+            const promptIdRaw = typeof obj.promptId === 'string' ? obj.promptId : '';
+            const labelBase = name || `Prompt ${String(promptIdRaw).slice(0, 6)}`;
+            const label = `${labelBase} (${pct.toFixed(2).replace(/\.00$/, '')}%)`;
+            return { id: promptIdRaw, label };
+          })
+          .filter((o) => typeof o.id === 'string' && o.id.length > 0);
         setAbPromptOptions(options);
-        const assignment = (assignResp.data as any)?.assignment ?? null;
-        setAbSelectedPromptId(assignment?.promptId ? String(assignment.promptId) : null);
-        setAbAssignedBy(assignment?.assignedBy ? String(assignment.assignedBy) : null);
+        const assignPayload = assignResp.data as unknown;
+        const assignment = isPlainObject(assignPayload) && isPlainObject(assignPayload.assignment) ? assignPayload.assignment : null;
+        const promptId = assignment && typeof assignment.promptId === 'string' ? assignment.promptId : null;
+        const assignedBy = assignment && typeof assignment.assignedBy === 'string' ? assignment.assignedBy : null;
+        setAbSelectedPromptId(promptId);
+        setAbAssignedBy(assignedBy);
       })
       .catch(() => {
         if (!active) return;
@@ -769,13 +801,18 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
           `/agent-prompt/instances/${encodeURIComponent(effectiveInstanceId)}/destinations/${encodeURIComponent(phone)}/assignment`,
           { promptId }
         );
-        const assignment = (resp.data as any)?.assignment ?? null;
-        setAbSelectedPromptId(assignment?.promptId ? String(assignment.promptId) : null);
-        setAbAssignedBy(assignment?.assignedBy ? String(assignment.assignedBy) : null);
+        const payload = resp.data as unknown;
+        const assignment = isPlainObject(payload) && isPlainObject(payload.assignment) ? payload.assignment : null;
+        const pid = assignment && typeof assignment.promptId === 'string' ? assignment.promptId : null;
+        const by = assignment && typeof assignment.assignedBy === 'string' ? assignment.assignedBy : null;
+        setAbSelectedPromptId(pid);
+        setAbAssignedBy(by);
       } catch (e) {
-        const status = (e as any)?.response?.status;
-        const msg = (e as any)?.response?.data?.message;
-        const m = typeof msg === 'string' ? msg : Array.isArray(msg) ? msg.join(', ') : null;
+        const err = e as { response?: { status?: unknown; data?: unknown } };
+        const status = typeof err?.response?.status === 'number' ? err.response.status : null;
+        const payload = err?.response?.data;
+        const msg = isPlainObject(payload) ? payload.message : null;
+        const m = typeof msg === 'string' ? msg : Array.isArray(msg) ? msg.map(String).join(', ') : null;
         setError(m ? `${m}${status ? ` (HTTP ${status})` : ''}` : 'Não foi possível alterar o prompt.');
       } finally {
         setAbIsLoading(false);
@@ -798,7 +835,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
     conversationPagingRef.current = { hasMore: false, nextCursor: null };
     if (instanceId) {
       const match = instances.find((i) => i.id === instanceId);
-      setSelectedOriginLabel((match?.name ?? instanceId) as any);
+      setSelectedOriginLabel(match?.name ?? instanceId);
       setSelectedOriginInstanceId(instanceId);
       selectedOriginInstanceIdRef.current = instanceId;
       void fetchAvatarForSelectedContact(instanceId);
@@ -817,7 +854,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
      const phoneParam = searchParams.get('phone');
      const directionParam = searchParams.get('direction');
      if (directionParam === 'inbound' || directionParam === 'outbound') {
-       setDirectionFilter(directionParam as any);
+      setDirectionFilter(directionParam);
      }
     if (phoneParam && typeof phoneParam === 'string') {
       const n = phoneParam.replace(/\D+/g, '');
