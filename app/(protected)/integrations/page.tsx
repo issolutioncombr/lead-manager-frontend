@@ -155,6 +155,21 @@ export default function IntegrationsPage() {
   const searchParams = useSearchParams();
   const { user, loading: authLoading } = useAuth();
 
+  const activeTab = (searchParams.get('tab') ?? 'general') === 'meta-ads' ? 'meta-ads' : 'general';
+  const setTab = useCallback(
+    (nextTab: 'general' | 'meta-ads') => {
+      const next = new URLSearchParams(searchParams.toString());
+      if (nextTab === 'general') {
+        next.delete('tab');
+      } else {
+        next.set('tab', 'meta-ads');
+      }
+      const suffix = next.size ? `?${next.toString()}` : '';
+      router.replace(`/integrations${suffix}`);
+    },
+    [router, searchParams]
+  );
+
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
   const [googleError, setGoogleError] = useState<string | null>(null);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
@@ -1187,10 +1202,32 @@ export default function IntegrationsPage() {
         </div>
       )}
 
-      <MetaAdsIntegrationCard />
+      <div className="flex flex-wrap gap-2 rounded-xl border border-gray-200 bg-white p-2 shadow-sm">
+        <button
+          type="button"
+          onClick={() => setTab('general')}
+          className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+            activeTab === 'general' ? 'bg-primary text-white' : 'text-gray-600 hover:bg-gray-100'
+          }`}
+        >
+          Integrações
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab('meta-ads')}
+          className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+            activeTab === 'meta-ads' ? 'bg-primary text-white' : 'text-gray-600 hover:bg-gray-100'
+          }`}
+        >
+          Meta ADS
+        </button>
+      </div>
 
-
-      <section className="rounded-2xl bg-white p-6 shadow-sm">
+      {activeTab === 'meta-ads' ? (
+        <MetaAdsIntegrationCard />
+      ) : (
+        <>
+          <section className="rounded-2xl bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-4 md:flex-row md:flex-wrap md:items-center md:justify-between">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Google Calendar</h2>
@@ -1826,6 +1863,8 @@ export default function IntegrationsPage() {
         onCancel={cancelEvolutionRemoveInstance}
         onConfirm={confirmEvolutionRemoveInstance}
       />
+        </>
+      )}
     </div>
   );
 }

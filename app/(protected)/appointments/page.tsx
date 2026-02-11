@@ -7,7 +7,7 @@ import { Modal } from '../../../components/Modal';
 import { StatusBadge } from '../../../components/StatusBadge';
 import api from '../../../lib/api';
 import { useAuth } from '../../../hooks/useAuth';
-import { Appointment, Lead, LeadStatus, Seller } from '../../../types';
+import { Appointment, Lead, LeadStatus, MetaAdsConfigResponse, Seller } from '../../../types';
 
 type AppointmentStatusOption = 'AGENDADA' | 'REMARCADO';
 type LeadSummary = Pick<Lead, 'id' | 'name' | 'email' | 'contact'>;
@@ -45,6 +45,9 @@ export default function AppointmentsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [leadStatuses, setLeadStatuses] = useState<LeadStatus[]>([]);
   const [leadStatusesLoading, setLeadStatusesLoading] = useState(false);
+  const [purchaseStageSlugs, setPurchaseStageSlugs] = useState<string[]>([]);
+  const [purchaseValue, setPurchaseValue] = useState('');
+  const [purchaseContentName, setPurchaseContentName] = useState('');
   const [leadSearch, setLeadSearch] = useState('');
   const [isLeadsLoading, setIsLeadsLoading] = useState(false);
   const [total, setTotal] = useState(0);
@@ -156,6 +159,18 @@ export default function AppointmentsPage() {
     }
   }, []);
 
+  const fetchPurchaseStages = useCallback(async () => {
+    try {
+      const { data } = await api.get<MetaAdsConfigResponse>('/integrations/meta-ads');
+      const slugs = (data.mappings ?? [])
+        .filter((m) => m.enabled && m.event && m.event.metaEventName.trim().toLowerCase() === 'purchase')
+        .map((m) => m.statusSlug);
+      setPurchaseStageSlugs(slugs);
+    } catch {
+      setPurchaseStageSlugs([]);
+    }
+  }, []);
+
   useEffect(() => {
     if (!isLeadPickerOpen) {
       return;
@@ -177,7 +192,8 @@ export default function AppointmentsPage() {
     hasFetchedInitial.current = true;
     fetchAppointments();
     void fetchLeadStatuses();
-  }, [fetchAppointments, fetchLeadStatuses]);
+    void fetchPurchaseStages();
+  }, [fetchAppointments, fetchLeadStatuses, fetchPurchaseStages]);
 
   const isoToLocalInput = (iso: string) => new Date(iso).toISOString().slice(0, 16);
 
@@ -205,6 +221,8 @@ export default function AppointmentsPage() {
       });
       setSelectedLeadInfo(null);
     }
+    setPurchaseValue('');
+    setPurchaseContentName('');
     setIsModalOpen(true);
   };
 
@@ -322,6 +340,19 @@ export default function AppointmentsPage() {
 
     if (editingAppointmentId && formState.leadStage) {
       payload.leadStage = formState.leadStage;
+      if (purchaseStageSlugs.includes(formState.leadStage)) {
+        const valueNumber = Number(purchaseValue);
+        if (!purchaseValue || Number.isNaN(valueNumber) || valueNumber <= 0) {
+          setError('Informe um value valido para Purchase (ex: 297.00).');
+          return;
+        }
+        if (!purchaseContentName.trim()) {
+          setError('Informe o content_name para Purchase (ex: Tratamento Alopecia).');
+          return;
+        }
+        payload.purchaseValue = valueNumber;
+        payload.purchaseContentName = purchaseContentName.trim();
+      }
     }
 
     try {
@@ -824,6 +855,32 @@ export default function AppointmentsPage() {
               </select>
             </label>
           )}
+
+          {editingAppointmentId && formState.leadStage && purchaseStageSlugs.includes(formState.leadStage) ? (
+            <>
+              <label className="text-sm md:col-span-2">
+                Value (BRL)
+                <input
+                  type="number"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={purchaseValue}
+                  onChange={(event) => setPurchaseValue(event.target.value)}
+                  placeholder="297.00"
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
+                />
+              </label>
+              <label className="text-sm md:col-span-2">
+                Content name
+                <input
+                  value={purchaseContentName}
+                  onChange={(event) => setPurchaseContentName(event.target.value)}
+                  placeholder="Tratamento Alopecia"
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
+                />
+              </label>
+            </>
+          ) : null}
 
           <div className="md:col-span-2">
             <button

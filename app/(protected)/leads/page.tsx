@@ -6,7 +6,7 @@ import { ConfirmDialog } from '../../../components/ConfirmDialog';
 import { Modal } from '../../../components/Modal';
 import { StatusBadge } from '../../../components/StatusBadge';
 import api from '../../../lib/api';
-import { Lead, LeadStatus } from '../../../types';
+import { Lead, LeadStatus, MetaAdsConfigResponse } from '../../../types';
 
 interface LeadsResponse {
   data: Lead[];
@@ -21,6 +21,9 @@ export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [leadStatuses, setLeadStatuses] = useState<LeadStatus[]>([]);
   const [leadStatusesLoading, setLeadStatusesLoading] = useState(true);
+  const [purchaseStageSlugs, setPurchaseStageSlugs] = useState<string[]>([]);
+  const [purchaseValue, setPurchaseValue] = useState('');
+  const [purchaseContentName, setPurchaseContentName] = useState('');
   const [total, setTotal] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -124,14 +127,27 @@ export default function LeadsPage() {
     }
   }, []);
 
+  const fetchPurchaseStages = useCallback(async () => {
+    try {
+      const { data } = await api.get<MetaAdsConfigResponse>('/integrations/meta-ads');
+      const slugs = (data.mappings ?? [])
+        .filter((m) => m.enabled && m.event && m.event.metaEventName.trim().toLowerCase() === 'purchase')
+        .map((m) => m.statusSlug);
+      setPurchaseStageSlugs(slugs);
+    } catch {
+      setPurchaseStageSlugs([]);
+    }
+  }, []);
+
   useEffect(() => {
     if (hasFetchedInitial.current) {
       return;
     }
     hasFetchedInitial.current = true;
     void fetchLeadStatuses();
+    void fetchPurchaseStages();
     fetchLeads();
-  }, [fetchLeads, fetchLeadStatuses]);
+  }, [fetchLeads, fetchLeadStatuses, fetchPurchaseStages]);
 
   useEffect(() => {
     if (!leadStatuses.length) return;
@@ -241,6 +257,8 @@ export default function LeadsPage() {
         stage: 'NOVO'
       });
     }
+    setPurchaseValue('');
+    setPurchaseContentName('');
     setIsModalOpen(true);
   };
 
@@ -249,7 +267,22 @@ export default function LeadsPage() {
     try {
       setError(null);
       if (editingLeadId) {
-        await api.patch(`/leads/${editingLeadId}`, formState);
+        const isPurchaseStage = purchaseStageSlugs.includes(formState.stage);
+        const payload: Record<string, unknown> = { ...formState };
+        if (isPurchaseStage) {
+          const valueNumber = Number(purchaseValue);
+          if (!purchaseValue || Number.isNaN(valueNumber) || valueNumber <= 0) {
+            setError('Informe um value valido para Purchase (ex: 297.00).');
+            return;
+          }
+          if (!purchaseContentName.trim()) {
+            setError('Informe o content_name para Purchase (ex: Tratamento Alopecia).');
+            return;
+          }
+          payload.purchaseValue = valueNumber;
+          payload.purchaseContentName = purchaseContentName.trim();
+        }
+        await api.patch(`/leads/${editingLeadId}`, payload);
       } else {
         await api.post('/leads', formState);
       }
@@ -624,6 +657,32 @@ export default function LeadsPage() {
               ))}
             </select>
           </label>
+
+          {editingLeadId && purchaseStageSlugs.includes(formState.stage) ? (
+            <>
+              <label className="text-sm">
+                Value (BRL)
+                <input
+                  type="number"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={purchaseValue}
+                  onChange={(event) => setPurchaseValue(event.target.value)}
+                  placeholder="297.00"
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
+                />
+              </label>
+              <label className="text-sm">
+                Content name
+                <input
+                  value={purchaseContentName}
+                  onChange={(event) => setPurchaseContentName(event.target.value)}
+                  placeholder="Tratamento Alopecia"
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
+                />
+              </label>
+            </>
+          ) : null}
 
           <label className="text-sm">
             Notas
