@@ -27,7 +27,7 @@ export const useProtectedRoute = () => {
     }
 
     if (seller) {
-      const alwaysAllowedPrefixes = ['/appointments', '/attendance'];
+      const alwaysAllowedPrefixes = ['/appointments', '/attendance', '/seller-notes', '/seller-reminders'];
       const linkRequiredPrefixes = ['/leads', '/mensagens-api'];
 
       const isAlwaysAllowed = alwaysAllowedPrefixes.some(

@@ -58,7 +58,8 @@ const BASE_ITEMS: NavItem[] = [
     icon: 'users',
     children: [
       { href: '/sellers', label: 'Vendedores' },
-      { href: '/seller-notes', label: 'Notas Seller' }
+      { href: '/seller-notes', label: 'Notas Seller' },
+      { href: '/seller-reminders', label: 'Lembretes Seller' }
     ]
   }
 ];

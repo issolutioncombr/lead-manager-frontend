@@ -127,13 +127,15 @@ export interface Appointment {
 
 export interface SellerCallNote {
   id: string;
-  sellerId: string;
-  appointmentId: string;
+  sellerId?: string | null;
+  leadId?: string;
+  appointmentId?: string | null;
   title?: string | null;
   content: string;
   createdAt: string;
   updatedAt: string;
   seller?: { id: string; name: string; email?: string | null };
+  lead?: { id: string; name?: string | null; email?: string | null; contact?: string | null; stage?: string | null };
   appointment?: Appointment;
 }
 
@@ -145,6 +147,12 @@ export interface SellerReminder {
   status: 'PENDING' | 'DONE' | 'CANCELED';
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SellerReminderOverviewItem extends SellerReminder {
+  seller?: { id: string; name: string; email?: string | null };
+  lead?: { id: string; name?: string | null; email?: string | null; contact?: string | null; stage?: string | null };
+  appointment?: Appointment;
 }
 
 export interface AppointmentBySellerReportRow {

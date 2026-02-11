@@ -13,6 +13,8 @@ const statusStyles: Record<string, string> = {
   cancelled: 'bg-red-100 text-red-600',
   completed: 'bg-emerald-100 text-emerald-700',
   pending: 'bg-yellow-100 text-yellow-700',
+  done: 'bg-emerald-100 text-emerald-700',
+  canceled: 'bg-red-100 text-red-600',
   confirmed: 'bg-emerald-100 text-emerald-700',
   novo: 'bg-indigo-100 text-indigo-700',
   agendada: 'bg-blue-100 text-blue-700',
@@ -30,7 +32,10 @@ const displayLabels: Record<string, string> = {
   COMPROU: 'Comprou',
   NOVO: 'Novo',
   NO_SHOW: 'Não compareceu',
-  REMARCADO: 'Remarcado'
+  REMARCADO: 'Remarcado',
+  PENDING: 'Pendente',
+  DONE: 'Concluido',
+  CANCELED: 'Cancelado'
 };
 
 export const StatusBadge = ({ value }: StatusBadgeProps) => {

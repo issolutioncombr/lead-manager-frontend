@@ -68,7 +68,6 @@ export default function SellerNotesPage() {
   }, [isSeller]);
 
   const fetchAppointments = useCallback(async () => {
-    if (!isSeller) return;
     setAppointmentsLoading(true);
     try {
       const { data } = await api.get<{ data: Appointment[] }>('/appointments', { params: { page: 1, limit: 100 } });
@@ -78,7 +77,7 @@ export default function SellerNotesPage() {
     } finally {
       setAppointmentsLoading(false);
     }
-  }, [isSeller]);
+  }, []);
 
   const fetchNotes = useCallback(async (targetPage = page, customFilters = filtersRef.current) => {
     setLoading(true);
@@ -126,13 +125,12 @@ export default function SellerNotesPage() {
 
   const openEditModal = (note: SellerCallNote) => {
     setEditingNote(note);
-    setFormState({ appointmentId: note.appointmentId, title: note.title ?? '', content: note.content ?? '' });
+    setFormState({ appointmentId: note.appointmentId ?? '', title: note.title ?? '', content: note.content ?? '' });
     setIsModalOpen(true);
   };
 
   const handleSave = async (event: FormEvent) => {
     event.preventDefault();
-    if (!isSeller) return;
     if (!formState.appointmentId) return;
     if (!formState.content.trim()) return;
     setSaving(true);
@@ -162,7 +160,7 @@ export default function SellerNotesPage() {
   const confirmDelete = (note: SellerCallNote) => setNoteToDelete(note);
 
   const handleDelete = async () => {
-    if (!isSeller || !noteToDelete) return;
+    if (!noteToDelete) return;
     setDeleting(true);
     setError(null);
     try {
@@ -192,16 +190,16 @@ export default function SellerNotesPage() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-semibold text-slate-900">Notas Seller</h1>
-          <p className="text-sm text-gray-500">{isSeller ? 'Crie notas sobre suas calls vinculadas.' : 'Veja as notas registradas pelos vendedores.'}</p>
+          <p className="text-sm text-gray-500">
+            {isSeller ? 'Crie notas sobre suas calls vinculadas.' : 'Veja as notas dos vendedores e registre notas da empresa.'}
+          </p>
         </div>
-        {isSeller ? (
-          <button
-            onClick={openCreateModal}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-dark"
-          >
-            Nova nota
-          </button>
-        ) : null}
+        <button
+          onClick={openCreateModal}
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-dark"
+        >
+          Nova nota
+        </button>
       </div>
 
       <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -270,8 +268,9 @@ export default function SellerNotesPage() {
         <div className="rounded-2xl bg-white shadow">
           <div className="block xl:hidden divide-y divide-gray-100">
             {notes.map((note) => {
-              const appointment = note.appointment ?? appointmentsMap.get(note.appointmentId) ?? null;
-              const sellerName = note.seller?.name ?? (isSeller ? seller?.name : 'Vendedor');
+              const appointment = note.appointment ?? (note.appointmentId ? appointmentsMap.get(note.appointmentId) : undefined) ?? null;
+              const sellerName = note.seller?.name ?? (isSeller ? seller?.name : note.sellerId ? 'Vendedor' : 'Empresa');
+              const canManage = isSeller || !note.sellerId;
               return (
                 <div key={note.id} className="space-y-3 p-4">
                   <div className="flex items-start justify-between gap-4">
@@ -305,7 +304,7 @@ export default function SellerNotesPage() {
                     ) : null}
                   </div>
 
-                  {isSeller ? (
+                  {canManage ? (
                     <div className="flex flex-wrap gap-2">
                       <button
                         onClick={() => openEditModal(note)}
@@ -336,12 +335,13 @@ export default function SellerNotesPage() {
                   <th className="px-6 py-3">Status</th>
                   <th className="px-6 py-3">Atualizado</th>
                   <th className="px-6 py-3">Nota</th>
-                  {isSeller ? <th className="px-6 py-3 text-right">Acoes</th> : null}
+                  <th className="px-6 py-3 text-right">Acoes</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-sm text-gray-700">
                 {notes.map((note) => {
-                  const appointment = note.appointment ?? appointmentsMap.get(note.appointmentId) ?? null;
+                  const appointment = note.appointment ?? (note.appointmentId ? appointmentsMap.get(note.appointmentId) : undefined) ?? null;
+                  const canManage = isSeller || !note.sellerId;
                   return (
                     <tr key={note.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4">
@@ -349,7 +349,9 @@ export default function SellerNotesPage() {
                         <p className="text-xs text-gray-500">{note.id}</p>
                       </td>
                       <td className="px-6 py-4">
-                        <p className="font-semibold text-gray-900">{note.seller?.name ?? (isSeller ? seller?.name : 'Vendedor')}</p>
+                        <p className="font-semibold text-gray-900">
+                          {note.seller?.name ?? (isSeller ? seller?.name : note.sellerId ? 'Vendedor' : 'Empresa')}
+                        </p>
                         <p className="text-xs text-gray-500">{note.seller?.email ?? '--'}</p>
                       </td>
                       <td className="px-6 py-4">
@@ -369,7 +371,7 @@ export default function SellerNotesPage() {
                       <td className="px-6 py-4">
                         <p className="max-w-[520px] whitespace-pre-wrap text-sm text-gray-700">{note.content}</p>
                       </td>
-                      {isSeller ? (
+                      {canManage ? (
                         <td className="px-6 py-4 text-right">
                           <div className="flex justify-end gap-2">
                             <button
@@ -386,7 +388,9 @@ export default function SellerNotesPage() {
                             </button>
                           </div>
                         </td>
-                      ) : null}
+                      ) : (
+                        <td className="px-6 py-4 text-right text-xs text-gray-400">--</td>
+                      )}
                     </tr>
                   );
                 })}
@@ -501,4 +505,3 @@ export default function SellerNotesPage() {
     </div>
   );
 }
-
