@@ -50,6 +50,7 @@ export default function SellersPage() {
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [linkSeller, setLinkSeller] = useState<Seller | null>(null);
   const [linkAppointments, setLinkAppointments] = useState<Appointment[]>([]);
+  const [linkSelectedAppointmentId, setLinkSelectedAppointmentId] = useState<string>('');
   const [linkIsLoading, setLinkIsLoading] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
   const [linkSuccess, setLinkSuccess] = useState<string | null>(null);
@@ -95,7 +96,6 @@ export default function SellersPage() {
         setCurrentPage(response.data.page ?? pageToFetch);
         setLastFetchedSearch(searchTerm);
       } catch (err) {
-        console.error(err);
         if (requestId === latestRequestRef.current) {
           setError('Nao foi possivel carregar os vendedores.');
           if (pageToFetch !== previousPage) {
@@ -210,12 +210,12 @@ export default function SellersPage() {
     setLinkError(null);
     setLinkSuccess(null);
     setLinkAppointments([]);
+    setLinkSelectedAppointmentId('');
     setLinkIsLoading(true);
     try {
       const resp = await api.get<AppointmentsResponse>('/appointments', { params: { page: 1, limit: 50 } });
       setLinkAppointments(Array.isArray(resp.data?.data) ? resp.data.data : []);
     } catch (err) {
-      console.error(err);
       setLinkError('Nao foi possivel carregar as video chamadas.');
     } finally {
       setLinkIsLoading(false);
@@ -224,19 +224,14 @@ export default function SellersPage() {
 
   const linkAppointment = async (appointmentId: string) => {
     if (!linkSeller) return;
+    setLinkSelectedAppointmentId(appointmentId);
     setLinkIsLoading(true);
     setLinkError(null);
     setLinkSuccess(null);
     try {
       await api.post(`/sellers/${linkSeller.id}/video-call-links`, { appointmentId });
       setLinkSuccess('Vendedor vinculado com sucesso.');
-      window.setTimeout(() => {
-        setIsLinkModalOpen(false);
-        setLinkSeller(null);
-        setLinkAppointments([]);
-      }, 600);
     } catch (err) {
-      console.error(err);
       setLinkError('Erro ao vincular vendedor.');
     } finally {
       setLinkIsLoading(false);
@@ -265,7 +260,6 @@ export default function SellersPage() {
         searchTerm: isSearchDirty ? search : lastFetchedSearch
       });
     } catch (err) {
-      console.error(err);
       setError('Erro ao salvar vendedor.');
     }
   };
@@ -288,7 +282,6 @@ export default function SellersPage() {
         searchTerm: isSearchDirty ? search : lastFetchedSearch
       });
     } catch (err) {
-      console.error(err);
       setError('Erro ao remover vendedor.');
     } finally {
       setIsDeleting(false);
@@ -381,7 +374,8 @@ export default function SellersPage() {
       )}
 
       <div className="rounded-2xl bg-white shadow">
-        <table className="min-w-full divide-y divide-gray-200">
+        <div className="overflow-x-auto">
+          <table className="min-w-[760px] w-full divide-y divide-gray-200">
           <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
             <tr>
               <th className="px-6 py-3">Nome</th>
@@ -408,13 +402,13 @@ export default function SellersPage() {
               sellers.map((seller) => (
                 <tr key={seller.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4">
-                    <p className="font-semibold">{seller.name}</p>
+                    <p className="max-w-[220px] truncate font-semibold">{seller.name}</p>
                   </td>
                   <td className="px-6 py-4">
-                    <p className="text-sm text-gray-500">{seller.email ?? '--'}</p>
+                    <p className="max-w-[260px] truncate text-sm text-gray-500">{seller.email ?? '--'}</p>
                   </td>
                   <td className="px-6 py-4">
-                    <p className="text-sm text-gray-500">{seller.contactNumber ?? '--'}</p>
+                    <p className="max-w-[180px] truncate text-sm text-gray-500">{seller.contactNumber ?? '--'}</p>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500">{formatDate(seller.createdAt)}</td>
                   <td className="px-6 py-4 text-right">
@@ -449,7 +443,8 @@ export default function SellersPage() {
               ))
             )}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
 
       <div className="flex flex-col items-start justify-between gap-3 border-t border-gray-100 pt-4 text-xs text-gray-500 sm:flex-row sm:items-center sm:text-sm">
@@ -537,6 +532,7 @@ export default function SellersPage() {
           setIsLinkModalOpen(false);
           setLinkSeller(null);
           setLinkAppointments([]);
+          setLinkSelectedAppointmentId('');
           setLinkError(null);
           setLinkSuccess(null);
         }}
@@ -555,7 +551,15 @@ export default function SellersPage() {
           )}
           {linkSuccess && (
             <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
-              {linkSuccess}
+              <p className="font-semibold">{linkSuccess}</p>
+              {linkSelectedAppointmentId ? (
+                <p className="mt-1 text-xs text-green-800/80">
+                  Video chamada:{' '}
+                  {linkAppointments.find((a) => a.id === linkSelectedAppointmentId)?.lead.name ??
+                    linkAppointments.find((a) => a.id === linkSelectedAppointmentId)?.lead.email ??
+                    'selecionada'}
+                </p>
+              ) : null}
             </div>
           )}
 
@@ -575,9 +579,10 @@ export default function SellersPage() {
                   <button
                     type="button"
                     onClick={() => void linkAppointment(a.id)}
+                    disabled={linkIsLoading || !!linkSuccess}
                     className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-1 text-xs font-semibold text-primary transition hover:bg-primary/10"
                   >
-                    Vincular
+                    {linkIsLoading && linkSelectedAppointmentId === a.id ? 'Vinculando...' : 'Vincular'}
                   </button>
                 </li>
               ))}

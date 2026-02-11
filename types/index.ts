@@ -114,6 +114,15 @@ export interface Appointment {
     contact?: string | null;
     stage?: string | null;
   };
+  sellerVideoCallAccesses?: Array<{
+    id: string;
+    sellerId: string;
+    leadId: string;
+    appointmentId?: string | null;
+    status: string;
+    expiresAt?: string | null;
+    seller: { id: string; name: string; email?: string | null };
+  }>;
 }
 
 export interface CampaignLog {

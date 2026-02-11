@@ -5,9 +5,10 @@ import clsx from 'clsx';
 import { useSearchParams } from 'next/navigation';
 
 import { Loading } from '../../../components/Loading';
+import { StatusBadge } from '../../../components/StatusBadge';
 import { useAuth } from '../../../hooks/useAuth';
 import api from '../../../lib/api';
-import { SellerAvailabilitySlot, WeekDay } from '../../../types';
+import { Appointment, SellerAvailabilitySlot, WeekDay } from '../../../types';
 
 const weekDayOrder: WeekDay[] = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
 const calendarWeekHeaders = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'];
@@ -22,6 +23,8 @@ interface SellerWithAvailability {
 const getWeekDayFromDate = (date: Date): WeekDay => weekDayOrder[date.getDay()];
 const isSameDay = (a: Date, b: Date) =>
   a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+const toDateInputValue = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 const buildCalendarDays = (month: Date): Date[] => {
   const firstDayOfMonth = new Date(month.getFullYear(), month.getMonth(), 1);
   const lastDayOfMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0);
@@ -54,6 +57,9 @@ const doesSlotMatchDate = (slot: SellerAvailabilitySlot, date: Date): boolean =>
 const SellerAttendanceManager = () => {
   const [slots, setSlots] = useState<SellerAvailabilitySlot[]>([]);
   const [loading, setLoading] = useState(true);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [appointmentsLoading, setAppointmentsLoading] = useState(false);
+  const [appointmentsError, setAppointmentsError] = useState<string | null>(null);
   const [formState, setFormState] = useState({ startTime: '', endTime: '' });
   const [saving, setSaving] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -70,16 +76,39 @@ const SellerAttendanceManager = () => {
       const { data } = await api.get<SellerAvailabilitySlot[]>('/seller-availability');
       setSlots(data);
     } catch (err) {
-      console.error(err);
       setError('Nao foi possivel carregar seus horarios. Tente novamente em instantes.');
     } finally {
       setLoading(false);
     }
   }, []);
 
+  const loadAppointmentsForMonth = useCallback(async () => {
+    const monthStart = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+    const monthEnd = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
+    const start = toDateInputValue(monthStart);
+    const end = toDateInputValue(monthEnd);
+    setAppointmentsLoading(true);
+    setAppointmentsError(null);
+    try {
+      const { data } = await api.get<{ data: Appointment[]; total: number }>('/appointments', {
+        params: { page: 1, limit: 100, start, end }
+      });
+      setAppointments(Array.isArray(data?.data) ? data.data : []);
+    } catch {
+      setAppointments([]);
+      setAppointmentsError('Nao foi possivel carregar seus agendamentos.');
+    } finally {
+      setAppointmentsLoading(false);
+    }
+  }, [currentMonth]);
+
   useEffect(() => {
     void loadSlots();
   }, [loadSlots]);
+
+  useEffect(() => {
+    void loadAppointmentsForMonth();
+  }, [loadAppointmentsForMonth]);
 
   useEffect(() => {
     setSelectedDate((prev) => {
@@ -106,7 +135,23 @@ const SellerAttendanceManager = () => {
     [slots]
   );
 
+  const appointmentsByDay = useMemo(() => {
+    const map = new Map<string, Appointment[]>();
+    appointments.forEach((appointment) => {
+      const d = new Date(appointment.start);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const list = map.get(key) ?? [];
+      list.push(appointment);
+      map.set(key, list);
+    });
+    return map;
+  }, [appointments]);
+
   const slotsForSelectedDate = useMemo(() => getSlotsForDate(selectedDate), [selectedDate, getSlotsForDate]);
+  const appointmentsForSelectedDate = useMemo(() => {
+    const key = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
+    return appointmentsByDay.get(key) ?? [];
+  }, [appointmentsByDay, selectedDate]);
 
   const handleInputChange = (field: 'startTime' | 'endTime', value: string) => {
     setFormState((prev) => ({
@@ -138,7 +183,6 @@ const SellerAttendanceManager = () => {
       setFormState({ startTime: '', endTime: '' });
       await loadSlots();
     } catch (err) {
-      console.error(err);
       setError('Nao foi possivel adicionar o horario.');
     } finally {
       setSaving(false);
@@ -165,7 +209,6 @@ const SellerAttendanceManager = () => {
       setSuccessMessage('Horario removido com sucesso.');
       setSlots((prev) => prev.filter((slot) => slot.id !== slotId));
     } catch (err) {
-      console.error(err);
       setError('Nao foi possivel remover o horario.');
     } finally {
       setRemovingId(null);
@@ -236,6 +279,8 @@ const SellerAttendanceManager = () => {
               const isTodayDate = isSameDay(date, today);
               const isSelected = isSameDay(date, selectedDate);
               const dateSlots = getSlotsForDate(date);
+              const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+              const dateAppointments = appointmentsByDay.get(key) ?? [];
 
               return (
                 <button
@@ -243,7 +288,7 @@ const SellerAttendanceManager = () => {
                   type="button"
                   onClick={() => handleSelectDate(date)}
                     className={clsx(
-                      'flex h-32 min-h-[8rem] min-w-[7.5rem] flex-col rounded-xl border px-4 py-3 text-left transition',
+                      'flex h-24 min-h-[6rem] flex-col rounded-xl border px-3 py-2 text-left transition sm:h-32 sm:min-h-[8rem] sm:px-4 sm:py-3',
                       isCurrentMonth ? 'bg-white' : 'bg-gray-50 text-gray-400',
                       isSelected && 'border-primary bg-primary/10 text-primary',
                       isTodayDate && 'border-primary/70'
@@ -260,6 +305,11 @@ const SellerAttendanceManager = () => {
                       {dateSlots.length} horario{dateSlots.length === 1 ? '' : 's'}
                     </div>
                   )}
+                  {dateAppointments.length ? (
+                    <div className={clsx('text-[11px]', isSelected ? 'text-primary' : 'text-gray-700')}>
+                      {dateAppointments.length} call{dateAppointments.length === 1 ? '' : 's'}
+                    </div>
+                  ) : null}
                 </button>
               );
             })}
@@ -278,6 +328,52 @@ const SellerAttendanceManager = () => {
           <p className="text-sm text-gray-500">
             Registre os horarios em que voce estara disponivel no dia selecionado.
           </p>
+
+          <div className="mt-4 space-y-2">
+            <p className="text-xs font-semibold uppercase text-gray-500">Agendamentos (calls)</p>
+            {appointmentsLoading ? (
+              <p className="text-sm text-gray-500">Carregando agendamentos...</p>
+            ) : appointmentsError ? (
+              <p className="text-sm text-red-700">{appointmentsError}</p>
+            ) : appointmentsForSelectedDate.length === 0 ? (
+              <p className="text-sm text-gray-500">Nenhuma call agendada para este dia.</p>
+            ) : (
+              <div className="space-y-2">
+                {appointmentsForSelectedDate
+                  .slice()
+                  .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
+                  .map((a) => (
+                    <div
+                      key={a.id}
+                      className="flex items-center justify-between gap-3 rounded-md border border-gray-100 bg-gray-50 px-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-gray-900">
+                          {a.lead.name ?? a.lead.email ?? 'Lead'}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(a.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} -{' '}
+                          {new Date(a.end).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <StatusBadge value={a.status} />
+                        {a.meetLink ? (
+                          <a
+                            href={a.meetLink}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs font-semibold text-primary underline"
+                          >
+                            Abrir
+                          </a>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
 
           <div className="mt-4 space-y-2">
             {slotsForSelectedDate.length === 0 ? (
@@ -351,6 +447,9 @@ const CompanyAttendanceOverview = ({ initialSellerId }: { initialSellerId?: stri
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [appointmentsLoading, setAppointmentsLoading] = useState(false);
+  const [appointmentsError, setAppointmentsError] = useState<string | null>(null);
   const [currentMonth, setCurrentMonth] = useState<Date>(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const [selectedDate, setSelectedDate] = useState<Date>(today);
   const [selectedSellerId, setSelectedSellerId] = useState<string | null>(null);
@@ -366,16 +465,37 @@ const CompanyAttendanceOverview = ({ initialSellerId }: { initialSellerId?: stri
       const { data } = await api.get<SellerWithAvailability[]>('/seller-availability/overview');
       setSellers(data);
     } catch (err) {
-      console.error(err);
       setError('Nao foi possivel carregar a agenda dos vendedores.');
     } finally {
       setLoading(false);
     }
   }, []);
 
+  const loadAppointmentsForMonth = useCallback(async () => {
+    const monthStart = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+    const monthEnd = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
+    const start = toDateInputValue(monthStart);
+    const end = toDateInputValue(monthEnd);
+    setAppointmentsLoading(true);
+    setAppointmentsError(null);
+    try {
+      const { data } = await api.get<{ data: Appointment[] }>('/appointments', { params: { page: 1, limit: 100, start, end } });
+      setAppointments(Array.isArray(data?.data) ? data.data : []);
+    } catch {
+      setAppointments([]);
+      setAppointmentsError('Nao foi possivel carregar os agendamentos.');
+    } finally {
+      setAppointmentsLoading(false);
+    }
+  }, [currentMonth]);
+
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    void loadAppointmentsForMonth();
+  }, [loadAppointmentsForMonth]);
 
   useEffect(() => {
     if (sellers.length === 0) {
@@ -416,6 +536,23 @@ const CompanyAttendanceOverview = ({ initialSellerId }: { initialSellerId?: stri
     () => getSellersWithSlotsForDate(selectedDate),
     [getSellersWithSlotsForDate, selectedDate]
   );
+
+  const appointmentsByDay = useMemo(() => {
+    const map = new Map<string, Appointment[]>();
+    appointments.forEach((appointment) => {
+      const d = new Date(appointment.start);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const list = map.get(key) ?? [];
+      list.push(appointment);
+      map.set(key, list);
+    });
+    return map;
+  }, [appointments]);
+
+  const appointmentsForSelectedDate = useMemo(() => {
+    const key = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
+    return appointmentsByDay.get(key) ?? [];
+  }, [appointmentsByDay, selectedDate]);
 
   const selectedSeller = selectedSellerId ? sellers.find((seller) => seller.id === selectedSellerId) ?? null : null;
 
@@ -477,7 +614,6 @@ const CompanyAttendanceOverview = ({ initialSellerId }: { initialSellerId?: stri
       setFormState({ startTime: '', endTime: '' });
       await load();
     } catch (err) {
-      console.error(err);
       setError('Nao foi possivel adicionar o horario para o vendedor.');
     } finally {
       setSaving(false);
@@ -496,7 +632,6 @@ const CompanyAttendanceOverview = ({ initialSellerId }: { initialSellerId?: stri
       setSuccessMessage('Horario removido com sucesso.');
       await load();
     } catch (err) {
-      console.error(err);
       setError('Nao foi possivel remover o horario.');
     } finally {
       setRemovingId(null);
@@ -572,6 +707,8 @@ const CompanyAttendanceOverview = ({ initialSellerId }: { initialSellerId?: stri
                 const isTodayDate = isSameDay(date, today);
                 const isSelected = isSameDay(date, selectedDate);
                 const sellersInDay = getSellersWithSlotsForDate(date);
+                const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                const dateAppointments = appointmentsByDay.get(key) ?? [];
 
                 return (
                   <button
@@ -579,7 +716,7 @@ const CompanyAttendanceOverview = ({ initialSellerId }: { initialSellerId?: stri
                     type="button"
                     onClick={() => handleSelectDate(date)}
                     className={clsx(
-                      'flex h-32 min-h-[8rem] min-w-[7.5rem] flex-col rounded-xl border px-4 py-3 text-left transition',
+                      'flex h-24 min-h-[6rem] flex-col rounded-xl border px-3 py-2 text-left transition sm:h-32 sm:min-h-[8rem] sm:px-4 sm:py-3',
                       isCurrentMonth ? 'bg-white' : 'bg-gray-50 text-gray-400',
                       isSelected && 'border-primary bg-primary/10 text-primary',
                       isTodayDate && 'border-primary/70'
@@ -606,6 +743,11 @@ const CompanyAttendanceOverview = ({ initialSellerId }: { initialSellerId?: stri
                         </div>
                       </>
                     )}
+                    {dateAppointments.length ? (
+                      <div className={clsx('text-[11px]', isSelected ? 'text-primary' : 'text-gray-700')}>
+                        {dateAppointments.length} call{dateAppointments.length === 1 ? '' : 's'}
+                      </div>
+                    ) : null}
                   </button>
                 );
               })}
@@ -648,6 +790,52 @@ const CompanyAttendanceOverview = ({ initialSellerId }: { initialSellerId?: stri
                     <p className="text-xs text-gray-500">{entry.slotsForDay.length} horario(s)</p>
                   </div>
                 ))
+              )}
+            </div>
+
+            <div className="mt-6 space-y-2">
+              <p className="text-xs font-semibold uppercase text-gray-500">Agendamentos (calls)</p>
+              {appointmentsLoading ? (
+                <p className="text-sm text-gray-500">Carregando agendamentos...</p>
+              ) : appointmentsError ? (
+                <p className="text-sm text-red-700">{appointmentsError}</p>
+              ) : appointmentsForSelectedDate.length === 0 ? (
+                <p className="text-sm text-gray-500">Nenhuma call agendada para este dia.</p>
+              ) : (
+                <div className="space-y-2">
+                  {appointmentsForSelectedDate
+                    .slice()
+                    .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
+                    .map((a) => (
+                      <div
+                        key={a.id}
+                        className="flex items-center justify-between gap-3 rounded-md border border-gray-100 bg-gray-50 px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-gray-900">
+                            {a.lead.name ?? a.lead.email ?? 'Lead'}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {new Date(a.start).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} -{' '}
+                            {new Date(a.end).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <StatusBadge value={a.status} />
+                          {a.meetLink ? (
+                            <a
+                              href={a.meetLink}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-xs font-semibold text-primary underline"
+                            >
+                              Abrir
+                            </a>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))}
+                </div>
               )}
             </div>
 

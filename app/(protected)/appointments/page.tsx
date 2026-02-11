@@ -80,6 +80,7 @@ export default function AppointmentsPage() {
   const [linkingAppointment, setLinkingAppointment] = useState<Appointment | null>(null);
   const [linkSellers, setLinkSellers] = useState<Seller[]>([]);
   const [linkSelectedSellerId, setLinkSelectedSellerId] = useState<string>('');
+  const [linkSellersLoading, setLinkSellersLoading] = useState(false);
   const [linkIsLoading, setLinkIsLoading] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
   const [linkSuccess, setLinkSuccess] = useState<string | null>(null);
@@ -123,7 +124,6 @@ export default function AppointmentsPage() {
         setTotal(response.data.total);
         setCurrentPage(response.data.page ?? pageToFetch);
       } catch (e) {
-        console.error(e);
         setError('Nao foi possivel carregar as calls.');
         setCurrentPage(previousPage);
       } finally {
@@ -142,7 +142,6 @@ export default function AppointmentsPage() {
         });
         setLeads(response.data.data);
       } catch (e) {
-        console.error('Erro ao buscar leads', e);
         setLeads([]);
       } finally {
         setIsLeadsLoading(false);
@@ -206,17 +205,19 @@ export default function AppointmentsPage() {
     if (seller) return;
     setLinkError(null);
     setLinkSuccess(null);
-    setLinkSelectedSellerId('');
+    setLinkSelectedSellerId(appointment.sellerVideoCallAccesses?.[0]?.sellerId ?? '');
     setLinkSellers([]);
     setLinkingAppointment(appointment);
     setIsLinkModalOpen(true);
+    setLinkSellersLoading(true);
     try {
-      const resp = await api.get<{ data: Seller[]; total?: number }>('/sellers', { params: { page: 1, limit: 200 } });
+      const resp = await api.get<{ data: Seller[]; total?: number }>('/sellers', { params: { page: 1, limit: 100 } });
       const list = Array.isArray(resp.data?.data) ? resp.data.data : [];
       setLinkSellers(list);
     } catch (err) {
-      console.error(err);
       setLinkError('Nao foi possivel carregar os vendedores.');
+    } finally {
+      setLinkSellersLoading(false);
     }
   };
 
@@ -233,13 +234,8 @@ export default function AppointmentsPage() {
     try {
       await api.post(`/sellers/${linkSelectedSellerId}/video-call-links`, { appointmentId: linkingAppointment.id });
       setLinkSuccess('Vendedor vinculado com sucesso.');
-      window.setTimeout(() => {
-        setIsLinkModalOpen(false);
-        setLinkingAppointment(null);
-        setLinkSelectedSellerId('');
-      }, 600);
+      void fetchAppointments({ page: currentPageRef.current });
     } catch (err) {
-      console.error(err);
       setLinkError('Erro ao vincular vendedor.');
     } finally {
       setLinkIsLoading(false);
@@ -435,7 +431,8 @@ export default function AppointmentsPage() {
       )}
 
       <div className="rounded-2xl bg-white shadow">
-        <table className="min-w-full divide-y divide-gray-200">
+        <div className="overflow-x-auto">
+          <table className="min-w-[960px] w-full divide-y divide-gray-200">
           <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
             <tr>
               <th className="px-6 py-3">Lead</th>
@@ -466,11 +463,16 @@ export default function AppointmentsPage() {
               appointments.map((appointment) => (
                 <tr key={appointment.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <p className="font-semibold">{appointment.lead.name ?? 'Sem nome'}</p>
-                    <p className="text-xs text-gray-400">{appointment.lead.email ?? '--'}</p>
+                    <p className="max-w-[240px] truncate font-semibold">{appointment.lead.name ?? 'Sem nome'}</p>
+                    <p className="max-w-[240px] truncate text-xs text-gray-400">{appointment.lead.email ?? '--'}</p>
+                    {appointment.sellerVideoCallAccesses?.[0]?.seller ? (
+                      <p className="mt-1 max-w-[240px] truncate text-xs font-semibold text-primary">
+                        Vinculado: {appointment.sellerVideoCallAccesses[0].seller.name}
+                      </p>
+                    ) : null}
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
-                    {appointment.lead.contact ?? '--'}
+                    <span className="block max-w-[180px] truncate">{appointment.lead.contact ?? '--'}</span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">{formatDateTime(appointment.start)}</td>
                   <td className="px-6 py-4 whitespace-nowrap">{formatDateTime(appointment.end)}</td>
@@ -502,7 +504,7 @@ export default function AppointmentsPage() {
                           onClick={() => void openLinkModal(appointment)}
                           className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-1 text-xs font-semibold text-primary transition hover:bg-primary/10"
                         >
-                          Vincular vendedor
+                          {appointment.sellerVideoCallAccesses?.length ? 'Trocar vendedor' : 'Vincular vendedor'}
                         </button>
                       )}
                       <button
@@ -523,7 +525,8 @@ export default function AppointmentsPage() {
               ))
             )}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
 
       <div className="flex flex-col items-start justify-between gap-3 border-t border-gray-100 pt-4 text-xs text-gray-500 sm:flex-row sm:items-center sm:text-sm">
@@ -723,6 +726,8 @@ export default function AppointmentsPage() {
           setIsLinkModalOpen(false);
           setLinkingAppointment(null);
           setLinkSelectedSellerId('');
+          setLinkSellers([]);
+          setLinkSellersLoading(false);
           setLinkError(null);
           setLinkSuccess(null);
         }}
@@ -742,7 +747,13 @@ export default function AppointmentsPage() {
           )}
           {linkSuccess && (
             <div className="rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
-              {linkSuccess}
+              <p className="font-semibold">{linkSuccess}</p>
+              {linkSelectedSellerId ? (
+                <p className="mt-1 text-xs text-green-800/80">
+                  Vendedor:{' '}
+                  {linkSellers.find((s) => s.id === linkSelectedSellerId)?.name ?? 'selecionado'}
+                </p>
+              ) : null}
             </div>
           )}
 
@@ -751,7 +762,8 @@ export default function AppointmentsPage() {
             <select
               value={linkSelectedSellerId}
               onChange={(e) => setLinkSelectedSellerId(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+              disabled={linkSellersLoading || linkIsLoading || !!linkSuccess}
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-50"
             >
               <option value="">Selecione...</option>
               {linkSellers.map((s) => (
@@ -765,10 +777,10 @@ export default function AppointmentsPage() {
           <button
             type="button"
             onClick={() => void submitLink()}
-            disabled={linkIsLoading || !linkingAppointment}
+            disabled={linkSellersLoading || linkIsLoading || !linkingAppointment || !!linkSuccess}
             className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {linkIsLoading ? 'Vinculando...' : 'Vincular'}
+            {linkSellersLoading ? 'Carregando vendedores...' : linkIsLoading ? 'Vinculando...' : 'Vincular'}
           </button>
         </div>
       </Modal>
