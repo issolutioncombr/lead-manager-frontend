@@ -31,6 +31,9 @@ const isMessagePayload = (value: unknown): value is Message => {
   const [selectedAvatarUrl, setSelectedAvatarUrl] = useState<string | null>(null);
   const [selectedOriginLabel, setSelectedOriginLabel] = useState<string | null>(null);
   const [showChatHeader, setShowChatHeader] = useState(false);
+  const [conversationInstanceNumber, setConversationInstanceNumber] = useState<string | null>(null);
+  const [conversationAgentStatus, setConversationAgentStatus] = useState<'ATIVO' | 'PAUSADO' | 'DESATIVADO'>('ATIVO');
+  const [conversationAgentStatusLoading, setConversationAgentStatusLoading] = useState(false);
   const [abPromptOptions, setAbPromptOptions] = useState<Array<{ id: string; label: string }>>([]);
   const [abSelectedPromptId, setAbSelectedPromptId] = useState<string | null>(null);
   const [abAssignedBy, setAbAssignedBy] = useState<string | null>(null);
@@ -86,9 +89,18 @@ const isMessagePayload = (value: unknown): value is Message => {
     selectedAvatarUrlRef.current = selectedAvatarUrl;
   }, [selectedAvatarUrl]);
 
+  const normalizePhoneLike = useCallback((value?: string | null) => {
+    const d = String(value ?? '').replace(/\D+/g, '');
+    if (!d) return '';
+    return d.startsWith('0') ? d.replace(/^0+/, '') : d;
+  }, []);
+
   const resetConversationView = useCallback(() => {
     avatarRequestSeqRef.current += 1;
     setShowChatHeader(false);
+    setConversationInstanceNumber(null);
+    setConversationAgentStatus('ATIVO');
+    setConversationAgentStatusLoading(false);
     setSelectedContact(null);
     selectedContactRef.current = null;
     selectedRemoteJidRef.current = null;
@@ -701,6 +713,16 @@ const isMessagePayload = (value: unknown): value is Message => {
       setSelectedName((name ?? '').trim() ? (name ?? null) : null);
       const effectiveInstanceId = (instanceIdRef.current ?? '').toString().trim();
       setShowChatHeader(!!effectiveInstanceId);
+      const inferredInstanceNumber = (() => {
+        if (effectiveInstanceId) {
+          const match = instances.find((i) => i.id === effectiveInstanceId);
+          const candidate = (match?.name ?? '').trim() || effectiveInstanceId;
+          return normalizePhoneLike(candidate) || null;
+        }
+        const candidate = String(originNumber ?? originLabel ?? '').trim() || null;
+        return candidate ? (normalizePhoneLike(candidate) || null) : null;
+      })();
+      setConversationInstanceNumber(inferredInstanceNumber);
       const conversationInstanceId = effectiveInstanceId ? effectiveInstanceId : (originInstanceId ?? null);
       if (!effectiveInstanceId) {
         setSelectedOriginInstanceId(originInstanceId ?? null);
@@ -728,9 +750,25 @@ const isMessagePayload = (value: unknown): value is Message => {
       if (!avatarSeed) {
         void fetchAvatarForSelectedContact(effectiveInstanceId || null);
       }
+      if (inferredInstanceNumber) {
+        setConversationAgentStatusLoading(true);
+        api
+          .get<{ status: 'ATIVO' | 'PAUSADO' | 'DESATIVADO' }>('/integrations/evolution/messages/agent-status', {
+            params: { instance_number: inferredInstanceNumber, contact_number: n }
+          })
+          .then((resp) => {
+            const s = resp.data?.status;
+            if (s === 'ATIVO' || s === 'PAUSADO' || s === 'DESATIVADO') setConversationAgentStatus(s);
+          })
+          .catch(() => {})
+          .finally(() => setConversationAgentStatusLoading(false));
+      } else {
+        setConversationAgentStatus('ATIVO');
+        setConversationAgentStatusLoading(false);
+      }
       await applyConversation(n, 50, { allowRetryLocal: true, remoteJid: remoteJid ?? null });
     },
-    [applyConversation, fetchAvatarForSelectedContact, instances]
+    [applyConversation, fetchAvatarForSelectedContact, instances, normalizePhoneLike]
   );
 
   useEffect(() => {
@@ -882,6 +920,30 @@ const isMessagePayload = (value: unknown): value is Message => {
      // eslint-disable-next-line react-hooks/exhaustive-deps
    }, []);
  
+  const setConversationAgentStatusRemote = useCallback(
+    async (value: 'ATIVO' | 'PAUSADO' | 'DESATIVADO') => {
+      const contact = selectedContactRef.current;
+      const inst = (conversationInstanceNumber ?? '').trim();
+      if (!contact || !inst) return;
+      const prev = conversationAgentStatus;
+      setConversationAgentStatus(value);
+      setConversationAgentStatusLoading(true);
+      try {
+        const resp = await api.post<{ status: 'ATIVO' | 'PAUSADO' | 'DESATIVADO' }>(
+          '/integrations/evolution/messages/agent-status',
+          { instance_number: inst, contact_number: contact, value }
+        );
+        const s = resp.data?.status;
+        if (s === 'ATIVO' || s === 'PAUSADO' || s === 'DESATIVADO') setConversationAgentStatus(s);
+      } catch {
+        setConversationAgentStatus(prev);
+      } finally {
+        setConversationAgentStatusLoading(false);
+      }
+    },
+    [conversationAgentStatus, conversationInstanceNumber]
+  );
+
   const sendMessage = useCallback(async () => {
      if (!normalizedPhone || (!text && !mediaUrl)) return;
      const clientMessageId = (globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2));
@@ -1179,6 +1241,42 @@ const isMessagePayload = (value: unknown): value is Message => {
             statusGlyph={statusGlyph}
             statusColor={statusColor}
           />
+          {selectedContact && conversationInstanceNumber && (
+            <div className="border-t border-[#202c33] px-3 py-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  disabled={conversationAgentStatusLoading}
+                  onClick={() => void setConversationAgentStatusRemote('PAUSADO')}
+                  className={[
+                    'rounded-md border border-[#202c33] px-3 py-2 text-xs',
+                    conversationAgentStatus === 'PAUSADO' ? 'bg-[#202c33] text-[#e9edef]' : 'bg-[#0b141a] text-[#e9edef]'
+                  ].join(' ')}
+                >
+                  Pausar Agent
+                </button>
+                <button
+                  disabled={conversationAgentStatusLoading}
+                  onClick={() => void setConversationAgentStatusRemote('DESATIVADO')}
+                  className={[
+                    'rounded-md border border-[#202c33] px-3 py-2 text-xs',
+                    conversationAgentStatus === 'DESATIVADO' ? 'bg-[#202c33] text-[#e9edef]' : 'bg-[#0b141a] text-[#e9edef]'
+                  ].join(' ')}
+                >
+                  Desativar Agent
+                </button>
+                <button
+                  disabled={conversationAgentStatusLoading}
+                  onClick={() => void setConversationAgentStatusRemote('ATIVO')}
+                  className={[
+                    'rounded-md border border-[#202c33] px-3 py-2 text-xs',
+                    conversationAgentStatus === 'ATIVO' ? 'bg-[#005c4b] text-white border-[#005c4b]' : 'bg-[#0b141a] text-[#e9edef]'
+                  ].join(' ')}
+                >
+                  Ativar Agent
+                </button>
+              </div>
+            </div>
+          )}
           <Composer
             selectedContact={selectedContact}
             displayPhone={formatPhone(selectedContact)}
