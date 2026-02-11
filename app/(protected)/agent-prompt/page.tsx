@@ -583,7 +583,7 @@ export default function AgentPromptPage() {
               Prompt
               {HIDE_AGENT_PROMPT_TEXT ? (
                 <div className="mt-1 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
-                  Conteúdo do prompt oculto por configuração.
+                  Conteúdo do prompt.
                 </div>
               ) : (
                 <textarea
