@@ -64,6 +64,39 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
  
    const normalizedPhone = useMemo(() => (selectedContact ?? '').replace(/\D+/g, ''), [selectedContact]);
  
+  const resetConversationView = useCallback(() => {
+    setSelectedContact(null);
+    selectedContactRef.current = null;
+    selectedRemoteJidRef.current = null;
+    setSelectedName(null);
+    setSelectedAvatarUrl(null);
+    setSelectedOriginLabel(null);
+    setSelectedOriginInstanceId(null);
+    selectedOriginInstanceIdRef.current = null;
+    setMessages([]);
+    messagesRef.current = [];
+    setConversationLimit(50);
+    conversationLimitRef.current = 50;
+    setIsLoadingOlder(false);
+    isLoadingOlderRef.current = false;
+    conversationPagingRef.current = { hasMore: false, nextCursor: null };
+    setHasNewMessages(false);
+    lastMessageIdRef.current = null;
+    lastCursorRef.current = { lastTimestamp: new Date(0).toISOString(), lastUpdatedAt: new Date(0).toISOString() };
+    setText('');
+    setMediaUrl('');
+    setCaption('');
+    setError(null);
+  }, []);
+
+  const handleInstanceChange = useCallback(
+    (id: string) => {
+      setInstanceId(id);
+      resetConversationView();
+    },
+    [resetConversationView]
+  );
+
   const scrollToBottom = useCallback(() => {
     const el = messagesContainerRef.current;
     if (!el) return;
@@ -949,7 +982,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
       <ChatList
         instances={instances}
         instanceId={instanceId}
-        onInstanceChange={setInstanceId}
+        onInstanceChange={handleInstanceChange}
         chatSearch={chatSearch}
         onChatSearchChange={setChatSearch}
         directionFilter={directionFilter}
