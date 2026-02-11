@@ -69,6 +69,52 @@ export interface Lead {
   updatedAt?: string;
 }
 
+export interface LeadStatus {
+  id: string;
+  slug: string;
+  name: string;
+  isSystem: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MetaAdsIntegration {
+  id: string;
+  enabled: boolean;
+  n8nWebhookUrl?: string | null;
+  accessToken?: string | null;
+  pixelId?: string | null;
+  testEventCode?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MetaAdsEvent {
+  id: string;
+  name: string;
+  metaEventName: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MetaAdsStatusMapping {
+  id: string;
+  statusSlug: string;
+  eventId: string;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+  event?: MetaAdsEvent;
+}
+
+export interface MetaAdsConfigResponse {
+  integration: MetaAdsIntegration;
+  events: MetaAdsEvent[];
+  mappings: MetaAdsStatusMapping[];
+  statuses: LeadStatus[];
+}
+
 export interface Seller {
   id: string;
   name: string;

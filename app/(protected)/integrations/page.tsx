@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ConfirmDialog } from '../../../components/ConfirmDialog';
 import { Loading } from '../../../components/Loading';
 import { Modal } from '../../../components/Modal';
+import { MetaAdsIntegrationCard } from '../../../components/MetaAdsIntegrationCard';
 import api from '../../../lib/api';
 import { useAuth } from '../../../hooks/useAuth';
 
@@ -1185,6 +1186,8 @@ export default function IntegrationsPage() {
           </button>
         </div>
       )}
+
+      <MetaAdsIntegrationCard />
 
 
       <section className="rounded-2xl bg-white p-6 shadow-sm">

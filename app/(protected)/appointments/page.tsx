@@ -7,10 +7,9 @@ import { Modal } from '../../../components/Modal';
 import { StatusBadge } from '../../../components/StatusBadge';
 import api from '../../../lib/api';
 import { useAuth } from '../../../hooks/useAuth';
-import { Appointment, Lead, Seller } from '../../../types';
+import { Appointment, Lead, LeadStatus, Seller } from '../../../types';
 
 type AppointmentStatusOption = 'AGENDADA' | 'REMARCADO';
-type LeadStageOption = 'NOVO' | 'AGENDOU_CALL' | 'ENTROU_CALL' | 'COMPROU' | 'NO_SHOW';
 type LeadSummary = Pick<Lead, 'id' | 'name' | 'email' | 'contact'>;
 
 interface AppointmentsResponse {
@@ -29,13 +28,6 @@ const statusLabels: Record<AppointmentStatusOption, string> = {
   AGENDADA: 'Agendada',
   REMARCADO: 'Remarcado'
 };
-const leadStageOptions: Array<{ value: LeadStageOption; label: string }> = [
-  { value: 'NOVO', label: 'Novo' },
-  { value: 'AGENDOU_CALL', label: 'Agendou uma call' },
-  { value: 'ENTROU_CALL', label: 'Entrou na call' },
-  { value: 'COMPROU', label: 'Comprou' },
-  { value: 'NO_SHOW', label: 'Não compareceu' }
-];
 const PAGE_SIZE = 20;
 
 const formatDateTime = (value: string) =>
@@ -51,6 +43,8 @@ export default function AppointmentsPage() {
   const { seller } = useAuth();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [leadStatuses, setLeadStatuses] = useState<LeadStatus[]>([]);
+  const [leadStatusesLoading, setLeadStatusesLoading] = useState(false);
   const [leadSearch, setLeadSearch] = useState('');
   const [isLeadsLoading, setIsLeadsLoading] = useState(false);
   const [total, setTotal] = useState(0);
@@ -69,7 +63,7 @@ export default function AppointmentsPage() {
     start: '',
     end: '',
     status: 'AGENDADA' as AppointmentStatusOption,
-    leadStage: '' as LeadStageOption | '',
+    leadStage: '',
     meetLink: ''
   });
   const [selectedLeadInfo, setSelectedLeadInfo] = useState<LeadSummary | null>(null);
@@ -150,6 +144,18 @@ export default function AppointmentsPage() {
     []
   );
 
+  const fetchLeadStatuses = useCallback(async () => {
+    setLeadStatusesLoading(true);
+    try {
+      const { data } = await api.get<LeadStatus[]>('/lead-statuses');
+      setLeadStatuses(Array.isArray(data) ? data : []);
+    } catch {
+      setLeadStatuses([]);
+    } finally {
+      setLeadStatusesLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!isLeadPickerOpen) {
       return;
@@ -170,7 +176,8 @@ export default function AppointmentsPage() {
     }
     hasFetchedInitial.current = true;
     fetchAppointments();
-  }, [fetchAppointments]);
+    void fetchLeadStatuses();
+  }, [fetchAppointments, fetchLeadStatuses]);
 
   const isoToLocalInput = (iso: string) => new Date(iso).toISOString().slice(0, 16);
 
@@ -182,7 +189,7 @@ export default function AppointmentsPage() {
         start: isoToLocalInput(appointment.start),
         end: isoToLocalInput(appointment.end),
         status: (appointment.status as AppointmentStatusOption) ?? 'AGENDADA',
-        leadStage: (appointment.lead.stage as LeadStageOption) ?? '',
+        leadStage: appointment.lead.stage ?? '',
         meetLink: appointment.meetLink ?? ''
       });
       setSelectedLeadInfo(appointment.lead);
@@ -804,15 +811,14 @@ export default function AppointmentsPage() {
               Status do lead
               <select
                 value={formState.leadStage}
-                onChange={(event) =>
-                  setFormState((prev) => ({ ...prev, leadStage: event.target.value as LeadStageOption | '' }))
-                }
+                onChange={(event) => setFormState((prev) => ({ ...prev, leadStage: event.target.value }))}
                 className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
               >
                 <option value="">Manter status atual</option>
-                {leadStageOptions.map((stage) => (
-                  <option key={stage.value} value={stage.value}>
-                    {stage.label}
+                {leadStatusesLoading ? <option value="">Carregando...</option> : null}
+                {leadStatuses.map((s) => (
+                  <option key={s.id} value={s.slug}>
+                    {s.name}
                   </option>
                 ))}
               </select>

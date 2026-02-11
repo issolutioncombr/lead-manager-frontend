@@ -6,9 +6,7 @@ import { ConfirmDialog } from '../../../components/ConfirmDialog';
 import { Modal } from '../../../components/Modal';
 import { StatusBadge } from '../../../components/StatusBadge';
 import api from '../../../lib/api';
-import { Lead } from '../../../types';
-
-type LeadStageOption = 'NOVO' | 'AGENDOU_CALL' | 'ENTROU_CALL' | 'COMPROU' | 'NO_SHOW';
+import { Lead, LeadStatus } from '../../../types';
 
 interface LeadsResponse {
   data: Lead[];
@@ -17,18 +15,12 @@ interface LeadsResponse {
   limit: number;
 }
 
-const stageOptions: Array<{ value: LeadStageOption; label: string }> = [
-  { value: 'NOVO', label: 'Novo' },
-  { value: 'AGENDOU_CALL', label: 'Agendou uma call' },
-  { value: 'ENTROU_CALL', label: 'Entrou na call' },
-  { value: 'COMPROU', label: 'Comprou' },
-  { value: 'NO_SHOW', label: 'Não compareceu' }
-];
-
 const PAGE_SIZE = 50;
 
 export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [leadStatuses, setLeadStatuses] = useState<LeadStatus[]>([]);
+  const [leadStatusesLoading, setLeadStatusesLoading] = useState(true);
   const [total, setTotal] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -44,11 +36,17 @@ export default function LeadsPage() {
     contact: '',
     source: '',
     notes: '',
-    stage: 'NOVO' as LeadStageOption
+    stage: 'NOVO'
   });
   const [editingLeadId, setEditingLeadId] = useState<string | null>(null);
   const [leadPendingDeletion, setLeadPendingDeletion] = useState<Lead | null>(null);
   const [isDeletingLead, setIsDeletingLead] = useState(false);
+  const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
+  const [newStatusName, setNewStatusName] = useState('');
+  const [statusSaving, setStatusSaving] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [statusPendingDeletion, setStatusPendingDeletion] = useState<LeadStatus | null>(null);
+  const [isDeletingStatus, setIsDeletingStatus] = useState(false);
   const latestRequestRef = useRef(0);
   const hasFetchedInitial = useRef(false);
 
@@ -112,13 +110,36 @@ export default function LeadsPage() {
     [currentPage, lastFetchedSearch, selectedSource, selectedStage]
   );
 
+  const fetchLeadStatuses = useCallback(async () => {
+    setLeadStatusesLoading(true);
+    setStatusError(null);
+    try {
+      const { data } = await api.get<LeadStatus[]>('/lead-statuses');
+      setLeadStatuses(Array.isArray(data) ? data : []);
+    } catch {
+      setLeadStatuses([]);
+      setStatusError('Nao foi possivel carregar os status.');
+    } finally {
+      setLeadStatusesLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (hasFetchedInitial.current) {
       return;
     }
     hasFetchedInitial.current = true;
+    void fetchLeadStatuses();
     fetchLeads();
-  }, [fetchLeads]);
+  }, [fetchLeads, fetchLeadStatuses]);
+
+  useEffect(() => {
+    if (!leadStatuses.length) return;
+    setFormState((prev) => {
+      const exists = leadStatuses.some((s) => s.slug === prev.stage);
+      return exists ? prev : { ...prev, stage: leadStatuses[0].slug };
+    });
+  }, [leadStatuses]);
 
   useEffect(() => {
     if (!isSearchDirty) {
@@ -207,7 +228,7 @@ export default function LeadsPage() {
         contact: lead.contact ?? '',
         source: lead.source ?? '',
         notes: lead.notes ?? '',
-        stage: (lead.stage as LeadStageOption) ?? 'NOVO'
+        stage: lead.stage ?? 'NOVO'
       });
     } else {
       setEditingLeadId(null);
@@ -273,6 +294,36 @@ export default function LeadsPage() {
       return;
     }
     setLeadPendingDeletion(null);
+  };
+
+  const handleCreateStatus = async () => {
+    if (!newStatusName.trim()) return;
+    setStatusSaving(true);
+    setStatusError(null);
+    try {
+      await api.post('/lead-statuses', { name: newStatusName.trim() });
+      setNewStatusName('');
+      await fetchLeadStatuses();
+    } catch {
+      setStatusError('Nao foi possivel criar o status.');
+    } finally {
+      setStatusSaving(false);
+    }
+  };
+
+  const handleConfirmDeleteStatus = async () => {
+    if (!statusPendingDeletion) return;
+    setIsDeletingStatus(true);
+    setStatusError(null);
+    try {
+      await api.delete(`/lead-statuses/${statusPendingDeletion.id}`);
+      setStatusPendingDeletion(null);
+      await fetchLeadStatuses();
+    } catch {
+      setStatusError('Nao foi possivel remover o status.');
+    } finally {
+      setIsDeletingStatus(false);
+    }
   };
 
   const handleExportCsv = async () => {
@@ -345,9 +396,9 @@ export default function LeadsPage() {
               className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
             >
               <option value="">Todos os estágios</option>
-              {stageOptions.map((stage) => (
-                <option key={stage.value} value={stage.value}>
-                  {stage.label}
+              {leadStatuses.map((s) => (
+                <option key={s.id} value={s.slug}>
+                  {s.name}
                 </option>
               ))}
             </select>
@@ -370,6 +421,13 @@ export default function LeadsPage() {
           </label>
 
           <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setIsStatusModalOpen(true)}
+              className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100"
+            >
+              Status
+            </button>
             <button
               onClick={handleRefresh}
               className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 transition hover:bg-gray-100"
@@ -556,14 +614,12 @@ export default function LeadsPage() {
             Status
             <select
               value={formState.stage}
-              onChange={(event) =>
-                setFormState((prev) => ({ ...prev, stage: event.target.value as LeadStageOption }))
-              }
+              onChange={(event) => setFormState((prev) => ({ ...prev, stage: event.target.value }))}
               className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
             >
-              {stageOptions.map((stage) => (
-                <option key={stage.value} value={stage.value}>
-                  {stage.label}
+              {leadStatuses.map((s) => (
+                <option key={s.id} value={s.slug}>
+                  {s.name}
                 </option>
               ))}
             </select>
@@ -587,6 +643,76 @@ export default function LeadsPage() {
           </button>
         </form>
       </Modal>
+
+      <Modal title="Status de Lead" isOpen={isStatusModalOpen} onClose={() => setIsStatusModalOpen(false)}>
+        <div className="grid gap-4">
+          {statusError ? <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-600">{statusError}</div> : null}
+
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="flex-1 text-sm">
+              Novo status
+              <input
+                value={newStatusName}
+                onChange={(e) => setNewStatusName(e.target.value)}
+                placeholder="Ex: Em negociação"
+                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
+              />
+            </label>
+            <button
+              type="button"
+              disabled={statusSaving || !newStatusName.trim()}
+              onClick={handleCreateStatus}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {statusSaving ? 'Salvando...' : 'Adicionar'}
+            </button>
+          </div>
+
+          {leadStatusesLoading ? (
+            <div className="py-6 text-center text-sm text-gray-500">Carregando...</div>
+          ) : (
+            <div className="divide-y divide-gray-100 rounded-xl border border-gray-200">
+              {leadStatuses.map((s) => (
+                <div key={s.id} className="flex items-center justify-between gap-3 p-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-gray-900">{s.name}</p>
+                    <p className="truncate text-xs text-gray-500">{s.slug}</p>
+                  </div>
+                  {!s.isSystem ? (
+                    <button
+                      type="button"
+                      onClick={() => setStatusPendingDeletion(s)}
+                      className="rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50"
+                    >
+                      Remover
+                    </button>
+                  ) : (
+                    <span className="text-xs font-semibold text-gray-400">Sistema</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      <ConfirmDialog
+        isOpen={statusPendingDeletion !== null}
+        title="Remover status"
+        description={
+          statusPendingDeletion ? (
+            <p>
+              Deseja realmente remover <span className="font-semibold text-slate-900">{statusPendingDeletion.name}</span>?
+            </p>
+          ) : null
+        }
+        confirmLabel="Remover"
+        cancelLabel="Cancelar"
+        tone="danger"
+        isConfirmLoading={isDeletingStatus}
+        onCancel={() => (isDeletingStatus ? null : setStatusPendingDeletion(null))}
+        onConfirm={handleConfirmDeleteStatus}
+      />
 
       <ConfirmDialog
         isOpen={leadPendingDeletion !== null}
