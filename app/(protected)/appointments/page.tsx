@@ -205,7 +205,7 @@ export default function AppointmentsPage() {
     if (seller) return;
     setLinkError(null);
     setLinkSuccess(null);
-    setLinkSelectedSellerId(appointment.sellerVideoCallAccesses?.[0]?.sellerId ?? '');
+    setLinkSelectedSellerId('');
     setLinkSellers([]);
     setLinkingAppointment(appointment);
     setIsLinkModalOpen(true);
@@ -232,7 +232,35 @@ export default function AppointmentsPage() {
     setLinkError(null);
     setLinkSuccess(null);
     try {
-      await api.post(`/sellers/${linkSelectedSellerId}/video-call-links`, { appointmentId: linkingAppointment.id });
+      const { data } = await api.post<{
+        id: string;
+        sellerId: string;
+        leadId: string;
+        appointmentId: string | null;
+        status: string;
+        expiresAt: string | null;
+      }>(`/sellers/${linkSelectedSellerId}/video-call-links`, { appointmentId: linkingAppointment.id });
+
+      const sellerInfo = linkSellers.find((s) => s.id === linkSelectedSellerId);
+      setLinkingAppointment((prev) => {
+        if (!prev) return prev;
+        const next = (prev.sellerVideoCallAccesses ?? []).filter((item) => item.sellerId !== data.sellerId);
+        next.push({
+          id: data.id,
+          sellerId: data.sellerId,
+          leadId: data.leadId,
+          appointmentId: data.appointmentId,
+          status: data.status,
+          expiresAt: data.expiresAt,
+          seller: {
+            id: data.sellerId,
+            name: sellerInfo?.name ?? 'Vendedor',
+            email: sellerInfo?.email ?? null
+          }
+        });
+        return { ...prev, sellerVideoCallAccesses: next };
+      });
+
       setLinkSuccess('Vendedor vinculado com sucesso.');
       void fetchAppointments({ page: currentPageRef.current });
     } catch (err) {
@@ -242,18 +270,21 @@ export default function AppointmentsPage() {
     }
   };
 
-  const revokeLink = async () => {
+  const revokeLink = async (target: NonNullable<Appointment['sellerVideoCallAccesses']>[number]) => {
     if (seller) return;
-    const currentLink = linkingAppointment?.sellerVideoCallAccesses?.[0];
-    if (!linkingAppointment || !currentLink) return;
+    if (!linkingAppointment) return;
     setLinkIsLoading(true);
     setLinkError(null);
     setLinkSuccess(null);
     try {
-      await api.delete(`/sellers/${currentLink.sellerId}/video-call-links/${currentLink.id}`);
+      await api.delete(`/sellers/${target.sellerId}/video-call-links/${target.id}`);
       setLinkSuccess('Vinculo removido com sucesso.');
       setLinkSelectedSellerId('');
-      setLinkingAppointment((prev) => (prev ? { ...prev, sellerVideoCallAccesses: [] } : prev));
+      setLinkingAppointment((prev) => {
+        if (!prev) return prev;
+        const next = (prev.sellerVideoCallAccesses ?? []).filter((item) => item.id !== target.id);
+        return { ...prev, sellerVideoCallAccesses: next };
+      });
       void fetchAppointments({ page: currentPageRef.current });
     } catch {
       setLinkError('Erro ao remover vinculo.');
@@ -295,7 +326,6 @@ export default function AppointmentsPage() {
       setIsModalOpen(false);
       await fetchAppointments({ page: currentPage });
     } catch (e) {
-      console.error(e);
       setError('Erro ao salvar call.');
     }
   };
@@ -320,7 +350,6 @@ export default function AppointmentsPage() {
       setAppointmentPendingDeletion(null);
       await fetchAppointments({ page: currentPage });
     } catch (e) {
-      console.error(e);
       setError('Erro ao remover call.');
     } finally {
       setIsDeletingAppointment(false);
@@ -460,23 +489,32 @@ export default function AppointmentsPage() {
             ) : (
               appointments.map((appointment) => (
                 <div key={appointment.id} className="space-y-3 p-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-gray-900">
-                        {appointment.lead.name ?? appointment.lead.email ?? 'Sem nome'}
-                      </p>
-                      <p className="truncate text-xs text-gray-500">{appointment.lead.email ?? '--'}</p>
-                      {appointment.sellerVideoCallAccesses?.[0]?.seller ? (
-                        <p className="mt-1 truncate text-xs font-semibold text-primary">
-                          Vinculado: {appointment.sellerVideoCallAccesses[0].seller.name}
-                        </p>
-                      ) : null}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <StatusBadge value={appointment.status} />
-                      {appointment.lead.stage ? <StatusBadge value={appointment.lead.stage} /> : null}
-                    </div>
-                  </div>
+                  {(() => {
+                    const linked = appointment.sellerVideoCallAccesses ?? [];
+                    const names = linked.map((item) => item.seller?.name).filter(Boolean) as string[];
+                    const preview = names.slice(0, 2).join(', ');
+                    const extra = names.length > 2 ? ` +${names.length - 2}` : '';
+                    return (
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-gray-900">
+                            {appointment.lead.name ?? appointment.lead.email ?? 'Sem nome'}
+                          </p>
+                          <p className="truncate text-xs text-gray-500">{appointment.lead.email ?? '--'}</p>
+                          {names.length ? (
+                            <p className="mt-1 truncate text-xs font-semibold text-primary">
+                              Vinculados ({names.length}): {preview}
+                              {extra}
+                            </p>
+                          ) : null}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <StatusBadge value={appointment.status} />
+                          {appointment.lead.stage ? <StatusBadge value={appointment.lead.stage} /> : null}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   <div className="grid gap-2 text-xs text-gray-600">
                     <div className="flex items-center justify-between gap-3">
@@ -518,7 +556,7 @@ export default function AppointmentsPage() {
                         onClick={() => void openLinkModal(appointment)}
                         className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs font-semibold text-primary transition hover:bg-primary/10"
                       >
-                        {appointment.sellerVideoCallAccesses?.length ? 'Trocar vendedor' : 'Vincular vendedor'}
+                        {appointment.sellerVideoCallAccesses?.length ? 'Gerenciar vendedores' : 'Vincular vendedor'}
                       </button>
                     )}
                     <button
@@ -574,9 +612,17 @@ export default function AppointmentsPage() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <p className="max-w-[240px] truncate font-semibold">{appointment.lead.name ?? 'Sem nome'}</p>
                       <p className="max-w-[240px] truncate text-xs text-gray-400">{appointment.lead.email ?? '--'}</p>
-                      {appointment.sellerVideoCallAccesses?.[0]?.seller ? (
+                      {appointment.sellerVideoCallAccesses?.length ? (
                         <p className="mt-1 max-w-[240px] truncate text-xs font-semibold text-primary">
-                          Vinculado: {appointment.sellerVideoCallAccesses[0].seller.name}
+                          Vinculados ({appointment.sellerVideoCallAccesses.length}):{' '}
+                          {appointment.sellerVideoCallAccesses
+                            .map((item) => item.seller?.name)
+                            .filter(Boolean)
+                            .slice(0, 2)
+                            .join(', ')}
+                          {appointment.sellerVideoCallAccesses.length > 2
+                            ? ` +${appointment.sellerVideoCallAccesses.length - 2}`
+                            : ''}
                         </p>
                       ) : null}
                     </td>
@@ -608,7 +654,7 @@ export default function AppointmentsPage() {
                             onClick={() => void openLinkModal(appointment)}
                             className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-1 text-xs font-semibold text-primary transition hover:bg-primary/10"
                           >
-                            {appointment.sellerVideoCallAccesses?.length ? 'Trocar vendedor' : 'Vincular vendedor'}
+                            {appointment.sellerVideoCallAccesses?.length ? 'Gerenciar vendedores' : 'Vincular vendedor'}
                           </button>
                         )}
                         <button
@@ -846,18 +892,29 @@ export default function AppointmentsPage() {
             </div>
           ) : null}
 
-          {!seller && linkingAppointment?.sellerVideoCallAccesses?.[0]?.seller ? (
+          {!seller && linkingAppointment?.sellerVideoCallAccesses?.length ? (
             <div className="rounded-lg border border-gray-200 bg-white p-3 text-sm">
-              <p className="text-xs font-semibold uppercase text-gray-500">Vinculo atual</p>
-              <p className="font-semibold text-gray-900">{linkingAppointment.sellerVideoCallAccesses[0].seller.name}</p>
-              <button
-                type="button"
-                onClick={() => void revokeLink()}
-                disabled={linkSellersLoading || linkIsLoading || !!linkSuccess}
-                className="mt-2 w-full rounded-lg border border-red-200 px-4 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {linkIsLoading ? 'Removendo...' : 'Remover vinculo'}
-              </button>
+              <p className="text-xs font-semibold uppercase text-gray-500">
+                Vendedores vinculados ({linkingAppointment.sellerVideoCallAccesses.length})
+              </p>
+              <ul className="mt-2 divide-y divide-gray-100">
+                {linkingAppointment.sellerVideoCallAccesses.map((item) => (
+                  <li key={item.id} className="flex items-center justify-between gap-3 py-2">
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-gray-900">{item.seller?.name ?? 'Vendedor'}</p>
+                      <p className="truncate text-xs text-gray-500">{item.seller?.email ?? '--'}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void revokeLink(item)}
+                      disabled={linkSellersLoading || linkIsLoading}
+                      className="rounded-lg border border-red-200 px-3 py-1 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Remover
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </div>
           ) : null}
 
@@ -880,8 +937,12 @@ export default function AppointmentsPage() {
             Vendedor
             <select
               value={linkSelectedSellerId}
-              onChange={(e) => setLinkSelectedSellerId(e.target.value)}
-              disabled={linkSellersLoading || linkIsLoading || !!linkSuccess}
+              onChange={(e) => {
+                setLinkSelectedSellerId(e.target.value);
+                setLinkError(null);
+                setLinkSuccess(null);
+              }}
+              disabled={linkSellersLoading || linkIsLoading}
               className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-50"
             >
               <option value="">Selecione...</option>
@@ -896,7 +957,7 @@ export default function AppointmentsPage() {
           <button
             type="button"
             onClick={() => void submitLink()}
-            disabled={linkSellersLoading || linkIsLoading || !linkingAppointment || !!linkSuccess}
+            disabled={linkSellersLoading || linkIsLoading || !linkingAppointment}
             className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60"
           >
             {linkSellersLoading ? 'Carregando vendedores...' : linkIsLoading ? 'Vinculando...' : 'Vincular'}
