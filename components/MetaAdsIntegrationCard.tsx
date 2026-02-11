@@ -175,12 +175,12 @@ export function MetaAdsIntegrationCard() {
           <form onSubmit={saveConfig} className="grid gap-4">
             <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
               <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
-              Ativar envio para Meta ADS (via N8N)
+              Ativar envio para Meta ADS
             </label>
 
             <div className="grid gap-3 md:grid-cols-2">
               <label className="text-sm">
-                Webhook do N8N
+                Webhook
                 <input
                   value={n8nWebhookUrl}
                   onChange={(e) => setN8nWebhookUrl(e.target.value)}
