@@ -55,6 +55,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
   const messagesRef = useRef<Message[]>([]);
   const instanceIdRef = useRef<string>('');
   const avatarRequestSeqRef = useRef(0);
+  const chatsRequestSeqRef = useRef(0);
   const lastCursorRef = useRef<{ lastTimestamp: string; lastUpdatedAt: string }>({
     lastTimestamp: new Date(0).toISOString(),
     lastUpdatedAt: new Date(0).toISOString()
@@ -99,6 +100,11 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
   const handleInstanceChange = useCallback(
     (id: string) => {
       instanceIdRef.current = id;
+      chatsRequestSeqRef.current += 1;
+      chatsAvatarSeqRef.current += 1;
+      chatAvatarCacheRef.current = {};
+      setIsLoadingChats(true);
+      setChats([]);
       setInstanceId(id);
       resetConversationView();
     },
@@ -296,6 +302,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
    }, []);
  
   const loadChats = useCallback(async () => {
+    const reqSeq = ++chatsRequestSeqRef.current;
      try {
        setIsLoadingChats(true);
        setError(null);
@@ -303,6 +310,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
        if (instanceId) params.instanceId = instanceId;
       params.limit = 500;
       const resp = await api.get<{ data: ChatItem[] }>('/integrations/evolution/messages/chats', { params: { ...params, source: preferLocal ? 'local' : 'provider' } });
+      if (reqSeq !== chatsRequestSeqRef.current) return;
        const data = Array.isArray(resp.data.data) ? resp.data.data : [];
        data.sort((a, b) => {
          const at = a.lastMessage?.timestamp ?? null;
@@ -314,10 +322,13 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
        });
       setChats(data);
      } catch (e) {
+       if (reqSeq !== chatsRequestSeqRef.current) return;
        const status = (e as any)?.response?.status;
       setError(`Não foi possível carregar as conversas${status ? ` (código ${status})` : ''}.`);
      } finally {
-       setIsLoadingChats(false);
+       if (reqSeq === chatsRequestSeqRef.current) {
+         setIsLoadingChats(false);
+       }
      }
   }, [instanceId, preferLocal]);
  
