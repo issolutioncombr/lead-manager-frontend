@@ -52,7 +52,7 @@ export default function SellerNotesPage() {
 
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [appointmentsLoading, setAppointmentsLoading] = useState(false);
-  const [leads, setLeads] = useState<LeadOption[]>([]);
+  const [companyLeads, setCompanyLeads] = useState<LeadOption[]>([]);
   const [leadsLoading, setLeadsLoading] = useState(false);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -89,42 +89,44 @@ export default function SellerNotesPage() {
     }
   }, []);
 
-  const fetchLeads = useCallback(async () => {
-    if (isSeller) {
-      const leadMap = new Map<string, LeadOption>();
-      appointments.forEach((a) => {
-        if (a.lead?.id) {
-          leadMap.set(a.lead.id, {
-            id: a.lead.id,
-            name: a.lead.name,
-            email: a.lead.email,
-            contact: a.lead.contact,
-            stage: a.lead.stage
-          });
-        }
-      });
-      setLeads(Array.from(leadMap.values()));
-      return;
-    }
+  const fetchCompanyLeads = useCallback(async () => {
     setLeadsLoading(true);
     try {
       const { data } = await api.get<{ data: Array<{ id: string; name?: string | null; email?: string | null; contact?: string | null; stage?: string | null }> }>(
         '/leads',
         { params: { page: 1, limit: 100 } }
       );
-      setLeads(
+      setCompanyLeads(
         Array.isArray(data?.data)
           ? data.data.map((l) => ({ id: l.id, name: l.name, email: l.email, contact: l.contact, stage: l.stage }))
           : []
       );
     } catch {
-      setLeads([]);
+      setCompanyLeads([]);
     } finally {
       setLeadsLoading(false);
     }
-  }, [appointments, isSeller]);
+  }, []);
 
-  const fetchNotes = useCallback(async (targetPage = page, customFilters = filtersRef.current) => {
+  const sellerLeads = useMemo(() => {
+    const leadMap = new Map<string, LeadOption>();
+    appointments.forEach((a) => {
+      if (a.lead?.id) {
+        leadMap.set(a.lead.id, {
+          id: a.lead.id,
+          name: a.lead.name,
+          email: a.lead.email,
+          contact: a.lead.contact,
+          stage: a.lead.stage
+        });
+      }
+    });
+    return Array.from(leadMap.values());
+  }, [appointments]);
+
+  const leadOptions = isSeller ? sellerLeads : companyLeads;
+
+  const fetchNotes = useCallback(async (targetPage = 1, customFilters = filtersRef.current) => {
     setLoading(true);
     setError(null);
     try {
@@ -149,18 +151,17 @@ export default function SellerNotesPage() {
     } finally {
       setLoading(false);
     }
-  }, [isSeller, limit, page]);
+  }, [isSeller, limit]);
 
   useEffect(() => {
     void fetchSellers();
     void fetchAppointments();
-    void fetchLeads();
     void fetchNotes(1);
-  }, [fetchAppointments, fetchLeads, fetchNotes, fetchSellers]);
+  }, [fetchAppointments, fetchNotes, fetchSellers]);
 
   useEffect(() => {
-    void fetchLeads();
-  }, [fetchLeads]);
+    if (!isSeller) void fetchCompanyLeads();
+  }, [fetchCompanyLeads, isSeller]);
 
   useEffect(() => {
     const t = window.setTimeout(() => void fetchNotes(1), 400);
@@ -560,7 +561,7 @@ export default function SellerNotesPage() {
                 className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
               >
                 <option value="">Sem lead</option>
-                {leads.map((l) => (
+                {leadOptions.map((l: LeadOption) => (
                   <option key={l.id} value={l.id}>
                     {leadLabel(l)}
                   </option>
