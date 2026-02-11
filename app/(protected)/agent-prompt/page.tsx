@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import api from '../../../lib/api';
 import { useAuth } from '../../../hooks/useAuth';
 
+const HIDE_AGENT_PROMPT_TEXT = (process.env.NEXT_PUBLIC_HIDE_AGENT_PROMPT_TEXT ?? 'false') === 'true';
+
 type PromptItem = {
   id: string;
   name: string | null;
@@ -202,7 +204,7 @@ export default function AgentPromptPage() {
   const startEditPrompt = (p: PromptItem) => {
     setEditingPromptId(p.id);
     setPromptName(p.name ?? '');
-    setPromptText(p.prompt ?? '');
+    setPromptText(HIDE_AGENT_PROMPT_TEXT ? '' : (p.prompt ?? ''));
     setError(null);
     setSuccessMessage(null);
   };
@@ -219,6 +221,11 @@ export default function AgentPromptPage() {
 
   const savePrompt = async (event: FormEvent) => {
     event.preventDefault();
+    if (HIDE_AGENT_PROMPT_TEXT) {
+      setError('Visualização e edição de prompts está desabilitada temporariamente.');
+      setSuccessMessage(null);
+      return;
+    }
     if (isSavingLibrary) return;
     setIsSavingLibrary(true);
     setError(null);
@@ -517,7 +524,8 @@ export default function AgentPromptPage() {
             <button
               type="button"
               onClick={startNewPrompt}
-              className="rounded-lg border px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+              className="rounded-lg border px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={HIDE_AGENT_PROMPT_TEXT}
             >
               Novo prompt
             </button>
@@ -534,10 +542,11 @@ export default function AgentPromptPage() {
                   <button
                     type="button"
                     onClick={() => startEditPrompt(p)}
-                    className="min-w-0 flex-1 text-left"
+                    className="min-w-0 flex-1 text-left disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={HIDE_AGENT_PROMPT_TEXT}
                   >
                     <div className="truncate text-sm font-semibold text-slate-900">{p.name ?? `Prompt ${p.id.slice(0, 6)}`}</div>
-                    <div className="truncate text-xs text-gray-500">{p.prompt}</div>
+                    <div className="truncate text-xs text-gray-500">{HIDE_AGENT_PROMPT_TEXT ? 'Conteúdo oculto.' : p.prompt}</div>
                   </button>
                   <button
                     type="button"
@@ -566,23 +575,29 @@ export default function AgentPromptPage() {
                   setSuccessMessage(null);
                 }}
                 className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-primary focus:outline-none"
-                disabled={isSavingLibrary}
+                disabled={isSavingLibrary || HIDE_AGENT_PROMPT_TEXT}
               />
               {duplicatePromptNameMessage && <div className="mt-1 text-xs text-red-700">{duplicatePromptNameMessage}</div>}
             </label>
             <label className="block text-sm font-medium text-gray-700">
               Prompt
-              <textarea
-                value={promptText}
-                onChange={(e) => {
-                  setPromptText(e.target.value);
-                  setError(null);
-                  setSuccessMessage(null);
-                }}
-                rows={8}
-                className="mt-1 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700 shadow focus:border-primary focus:outline-none"
-                disabled={isSavingLibrary}
-              />
+              {HIDE_AGENT_PROMPT_TEXT ? (
+                <div className="mt-1 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+                  Conteúdo do prompt oculto por configuração.
+                </div>
+              ) : (
+                <textarea
+                  value={promptText}
+                  onChange={(e) => {
+                    setPromptText(e.target.value);
+                    setError(null);
+                    setSuccessMessage(null);
+                  }}
+                  rows={8}
+                  className="mt-1 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700 shadow focus:border-primary focus:outline-none"
+                  disabled={isSavingLibrary}
+                />
+              )}
             </label>
             <div className="flex items-center justify-between text-sm text-gray-500">
               <span>
@@ -593,7 +608,7 @@ export default function AgentPromptPage() {
                   <button
                     type="button"
                     onClick={startNewPrompt}
-                    disabled={isSavingLibrary}
+                    disabled={isSavingLibrary || HIDE_AGENT_PROMPT_TEXT}
                     className="rounded-lg border px-4 py-2 font-semibold text-slate-900 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Cancelar
@@ -603,6 +618,7 @@ export default function AgentPromptPage() {
                   type="submit"
                   disabled={
                     isSavingLibrary ||
+                    HIDE_AGENT_PROMPT_TEXT ||
                     !promptText.trim() ||
                     promptText.trim().length > maxStoredPromptLength ||
                     !!duplicatePromptNameMessage
