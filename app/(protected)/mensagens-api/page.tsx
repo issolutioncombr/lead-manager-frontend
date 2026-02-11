@@ -701,6 +701,7 @@ const isMessagePayload = (value: unknown): value is Message => {
       setSelectedName((name ?? '').trim() ? (name ?? null) : null);
       const effectiveInstanceId = (instanceIdRef.current ?? '').toString().trim();
       setShowChatHeader(!!effectiveInstanceId);
+      const conversationInstanceId = effectiveInstanceId ? effectiveInstanceId : (originInstanceId ?? null);
       if (!effectiveInstanceId) {
         setSelectedOriginInstanceId(originInstanceId ?? null);
         setSelectedOriginLabel(originNumber ?? originLabel ?? originInstanceId ?? 'todas instâncias');
@@ -709,6 +710,7 @@ const isMessagePayload = (value: unknown): value is Message => {
         const match = instances.find((i) => i.id === effectiveInstanceId);
         setSelectedOriginLabel(match?.name ?? effectiveInstanceId);
       }
+      selectedOriginInstanceIdRef.current = conversationInstanceId;
       setMessages([]);
       setConversationLimit(50);
       setIsLoadingOlder(false);
