@@ -141,6 +141,9 @@ export interface SellerCallNote {
 
 export interface SellerReminder {
   id: string;
+  sellerId?: string | null;
+  leadId?: string | null;
+  appointmentId?: string | null;
   title: string;
   content?: string | null;
   remindAt: string;

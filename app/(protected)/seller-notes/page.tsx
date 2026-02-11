@@ -11,6 +11,14 @@ import { ConfirmDialog } from '../../../components/ConfirmDialog';
 import { Loading } from '../../../components/Loading';
 import { StatusBadge } from '../../../components/StatusBadge';
 
+type LeadOption = {
+  id: string;
+  name?: string | null;
+  email?: string | null;
+  contact?: string | null;
+  stage?: string | null;
+};
+
 const formatDateTime = (value?: string | null) => {
   if (!value) return '--';
   const d = new Date(value);
@@ -44,10 +52,12 @@ export default function SellerNotesPage() {
 
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [appointmentsLoading, setAppointmentsLoading] = useState(false);
+  const [leads, setLeads] = useState<LeadOption[]>([]);
+  const [leadsLoading, setLeadsLoading] = useState(false);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<SellerCallNote | null>(null);
-  const [formState, setFormState] = useState({ appointmentId: '', title: '', content: '' });
+  const [formState, setFormState] = useState({ appointmentId: '', leadId: '', title: '', content: '' });
   const [saving, setSaving] = useState(false);
 
   const [noteToDelete, setNoteToDelete] = useState<SellerCallNote | null>(null);
@@ -79,6 +89,41 @@ export default function SellerNotesPage() {
     }
   }, []);
 
+  const fetchLeads = useCallback(async () => {
+    if (isSeller) {
+      const leadMap = new Map<string, LeadOption>();
+      appointments.forEach((a) => {
+        if (a.lead?.id) {
+          leadMap.set(a.lead.id, {
+            id: a.lead.id,
+            name: a.lead.name,
+            email: a.lead.email,
+            contact: a.lead.contact,
+            stage: a.lead.stage
+          });
+        }
+      });
+      setLeads(Array.from(leadMap.values()));
+      return;
+    }
+    setLeadsLoading(true);
+    try {
+      const { data } = await api.get<{ data: Array<{ id: string; name?: string | null; email?: string | null; contact?: string | null; stage?: string | null }> }>(
+        '/leads',
+        { params: { page: 1, limit: 100 } }
+      );
+      setLeads(
+        Array.isArray(data?.data)
+          ? data.data.map((l) => ({ id: l.id, name: l.name, email: l.email, contact: l.contact, stage: l.stage }))
+          : []
+      );
+    } catch {
+      setLeads([]);
+    } finally {
+      setLeadsLoading(false);
+    }
+  }, [appointments, isSeller]);
+
   const fetchNotes = useCallback(async (targetPage = page, customFilters = filtersRef.current) => {
     setLoading(true);
     setError(null);
@@ -109,8 +154,13 @@ export default function SellerNotesPage() {
   useEffect(() => {
     void fetchSellers();
     void fetchAppointments();
+    void fetchLeads();
     void fetchNotes(1);
-  }, [fetchAppointments, fetchNotes, fetchSellers]);
+  }, [fetchAppointments, fetchLeads, fetchNotes, fetchSellers]);
+
+  useEffect(() => {
+    void fetchLeads();
+  }, [fetchLeads]);
 
   useEffect(() => {
     const t = window.setTimeout(() => void fetchNotes(1), 400);
@@ -119,19 +169,23 @@ export default function SellerNotesPage() {
 
   const openCreateModal = () => {
     setEditingNote(null);
-    setFormState({ appointmentId: appointments[0]?.id ?? '', title: '', content: '' });
+    setFormState({ appointmentId: '', leadId: '', title: '', content: '' });
     setIsModalOpen(true);
   };
 
   const openEditModal = (note: SellerCallNote) => {
     setEditingNote(note);
-    setFormState({ appointmentId: note.appointmentId ?? '', title: note.title ?? '', content: note.content ?? '' });
+    setFormState({
+      appointmentId: note.appointmentId ?? '',
+      leadId: note.leadId ?? '',
+      title: note.title ?? '',
+      content: note.content ?? ''
+    });
     setIsModalOpen(true);
   };
 
   const handleSave = async (event: FormEvent) => {
     event.preventDefault();
-    if (!formState.appointmentId) return;
     if (!formState.content.trim()) return;
     setSaving(true);
     setError(null);
@@ -139,11 +193,14 @@ export default function SellerNotesPage() {
       if (editingNote) {
         await api.patch(`/seller-notes/${editingNote.id}`, {
           title: formState.title || null,
-          content: formState.content
+          content: formState.content,
+          appointmentId: formState.appointmentId || null,
+          leadId: formState.leadId || null
         });
       } else {
         await api.post('/seller-notes', {
-          appointmentId: formState.appointmentId,
+          appointmentId: formState.appointmentId || undefined,
+          leadId: formState.leadId || undefined,
           title: formState.title || null,
           content: formState.content
         });
@@ -177,6 +234,10 @@ export default function SellerNotesPage() {
   const appointmentLabel = useCallback((a: Appointment) => {
     const lead = a.lead?.name ?? a.lead?.email ?? 'Lead';
     return `${lead} • ${formatDateTime(a.start)}`;
+  }, []);
+
+  const leadLabel = useCallback((l: LeadOption) => {
+    return l.name ?? l.email ?? l.contact ?? 'Lead';
   }, []);
 
   const appointmentsMap = useMemo(() => {
@@ -291,6 +352,10 @@ export default function SellerNotesPage() {
                         {appointment.lead?.name ?? appointment.lead?.email ?? 'Lead'}
                       </p>
                     </div>
+                  ) : note.lead ? (
+                    <p className="truncate text-xs text-gray-600">
+                      <span className="font-semibold text-gray-500">Lead:</span> {note.lead.name ?? note.lead.email ?? 'Lead'}
+                    </p>
                   ) : null}
 
                   <p className="whitespace-pre-wrap text-sm text-gray-700">{note.content}</p>
@@ -361,6 +426,11 @@ export default function SellerNotesPage() {
                             <p className="max-w-[280px] truncate text-xs text-gray-500">
                               {appointment.lead?.name ?? appointment.lead?.email ?? 'Lead'}
                             </p>
+                          </>
+                        ) : note.lead ? (
+                          <>
+                            <p className="max-w-[280px] truncate font-semibold text-gray-900">{note.lead.name ?? note.lead.email ?? 'Lead'}</p>
+                            <p className="max-w-[280px] truncate text-xs text-gray-500">Sem call</p>
                           </>
                         ) : (
                           '--'
@@ -433,28 +503,66 @@ export default function SellerNotesPage() {
           setIsModalOpen(false);
         }}
       >
-        {appointmentsLoading ? (
+        {appointmentsLoading || leadsLoading ? (
           <div className="flex items-center justify-center p-10">
             <Loading />
           </div>
-        ) : !appointments.length ? (
-          <p className="text-sm text-gray-500">Nenhuma call vinculada para registrar nota.</p>
         ) : (
           <form onSubmit={handleSave} className="grid gap-4">
             <label className="text-sm">
-              Call
+              Vincular a uma call (opcional)
               <select
                 value={formState.appointmentId}
-                onChange={(e) => setFormState((prev) => ({ ...prev, appointmentId: e.target.value }))}
-                disabled={!!editingNote}
-                className={clsx(
-                  'mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none',
-                  editingNote && 'bg-gray-50'
-                )}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  if (!id) {
+                    setFormState((prev) => ({ ...prev, appointmentId: '' }));
+                    return;
+                  }
+                  const a = appointments.find((x) => x.id === id);
+                  setFormState((prev) => ({
+                    ...prev,
+                    appointmentId: id,
+                    leadId: prev.leadId && a?.lead?.id && prev.leadId !== a.lead.id ? '' : prev.leadId
+                  }));
+                }}
+                className={clsx('mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none')}
               >
+                <option value="">Sem call</option>
                 {appointments.map((a) => (
                   <option key={a.id} value={a.id}>
                     {appointmentLabel(a)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="text-sm">
+              Vincular a um lead (opcional)
+              <select
+                value={formState.leadId}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  if (!id) {
+                    setFormState((prev) => ({ ...prev, leadId: '' }));
+                    return;
+                  }
+                  const currentAppointment = formState.appointmentId
+                    ? appointments.find((a) => a.id === formState.appointmentId)
+                    : null;
+                  const shouldClearAppointment = currentAppointment?.lead?.id && currentAppointment.lead.id !== id;
+                  setFormState((prev) => ({
+                    ...prev,
+                    leadId: id,
+                    appointmentId: shouldClearAppointment ? '' : prev.appointmentId
+                  }));
+                }}
+                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
+              >
+                <option value="">Sem lead</option>
+                {leads.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {leadLabel(l)}
                   </option>
                 ))}
               </select>

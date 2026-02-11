@@ -13,6 +13,14 @@ import { StatusBadge } from '../../../components/StatusBadge';
 
 type RemindersResponse = { data: SellerReminderOverviewItem[]; total: number; page: number; limit: number };
 
+type LeadOption = {
+  id: string;
+  name?: string | null;
+  email?: string | null;
+  contact?: string | null;
+  stage?: string | null;
+};
+
 const formatDateTime = (value?: string | null) => {
   if (!value) return '--';
   const d = new Date(value);
@@ -29,25 +37,30 @@ export default function SellerRemindersPage() {
   const [sellerFilterId, setSellerFilterId] = useState('');
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [appointmentsLoading, setAppointmentsLoading] = useState(false);
+  const [leads, setLeads] = useState<LeadOption[]>([]);
+  const [leadsLoading, setLeadsLoading] = useState(false);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [view, setView] = useState<'MY' | 'SELLERS'>(isSeller ? 'MY' : 'MY');
+  const canWrite = isSeller || (!isSeller && view === 'MY');
+
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const filtersRef = useRef({ search, statusFilter, startDate, endDate, sellerFilterId });
+  const filtersRef = useRef({ search, statusFilter, startDate, endDate, sellerFilterId, view });
 
   useEffect(() => {
-    filtersRef.current = { search, statusFilter, startDate, endDate, sellerFilterId };
-  }, [search, statusFilter, startDate, endDate, sellerFilterId]);
+    filtersRef.current = { search, statusFilter, startDate, endDate, sellerFilterId, view };
+  }, [search, statusFilter, startDate, endDate, sellerFilterId, view]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editing, setEditing] = useState<SellerReminderOverviewItem | null>(null);
-  const [formState, setFormState] = useState({ title: '', content: '', remindAt: '', appointmentId: '' });
+  const [formState, setFormState] = useState({ title: '', content: '', remindAt: '', appointmentId: '', leadId: '' });
   const [saving, setSaving] = useState(false);
 
   const [toDelete, setToDelete] = useState<SellerReminderOverviewItem | null>(null);
@@ -69,10 +82,11 @@ export default function SellerRemindersPage() {
         start: customFilters.startDate || undefined,
         end: customFilters.endDate || undefined
       };
-      if (!isSeller && customFilters.sellerFilterId) {
+      const endpoint =
+        isSeller || customFilters.view === 'MY' ? '/seller-reminders' : '/seller-reminders/overview';
+      if (!isSeller && customFilters.view === 'SELLERS' && customFilters.sellerFilterId) {
         params.sellerId = customFilters.sellerFilterId;
       }
-      const endpoint = isSeller ? '/seller-reminders' : '/seller-reminders/overview';
       const { data } = await api.get<RemindersResponse>(endpoint, { params });
       setReminders(Array.isArray(data?.data) ? data.data : []);
       setTotal(typeof data?.total === 'number' ? data.total : 0);
@@ -97,7 +111,6 @@ export default function SellerRemindersPage() {
   }, [isSeller]);
 
   const fetchAppointments = useCallback(async () => {
-    if (!isSeller) return;
     setAppointmentsLoading(true);
     try {
       const { data } = await api.get<{ data: Appointment[] }>('/appointments', { params: { page: 1, limit: 100 } });
@@ -107,18 +120,58 @@ export default function SellerRemindersPage() {
     } finally {
       setAppointmentsLoading(false);
     }
-  }, [isSeller]);
+  }, []);
+
+  const fetchLeads = useCallback(async () => {
+    if (isSeller) {
+      const leadMap = new Map<string, LeadOption>();
+      appointments.forEach((a) => {
+        if (a.lead?.id) {
+          leadMap.set(a.lead.id, {
+            id: a.lead.id,
+            name: a.lead.name,
+            email: a.lead.email,
+            contact: a.lead.contact,
+            stage: a.lead.stage
+          });
+        }
+      });
+      setLeads(Array.from(leadMap.values()));
+      return;
+    }
+    setLeadsLoading(true);
+    try {
+      const { data } = await api.get<{ data: Array<{ id: string; name?: string | null; email?: string | null; contact?: string | null; stage?: string | null }> }>(
+        '/leads',
+        { params: { page: 1, limit: 100 } }
+      );
+      setLeads(
+        Array.isArray(data?.data)
+          ? data.data.map((l) => ({ id: l.id, name: l.name, email: l.email, contact: l.contact, stage: l.stage }))
+          : []
+      );
+    } catch {
+      setLeads([]);
+    } finally {
+      setLeadsLoading(false);
+    }
+  }, [appointments, isSeller]);
 
   useEffect(() => {
     void fetchSellers();
     void fetchAppointments();
+    void fetchLeads();
     void fetchReminders(1);
-  }, [fetchAppointments, fetchReminders, fetchSellers]);
+  }, [fetchAppointments, fetchLeads, fetchReminders, fetchSellers]);
+
+  useEffect(() => {
+    void fetchLeads();
+  }, [fetchLeads]);
 
   useEffect(() => {
     const t = window.setTimeout(() => void fetchReminders(1), 400);
     return () => window.clearTimeout(t);
-  }, [fetchReminders, search, statusFilter, startDate, endDate, sellerFilterId]);
+  }, [fetchReminders, search, statusFilter, startDate, endDate, sellerFilterId, view]);
 
   const openCreate = () => {
     const now = new Date();
@@ -128,7 +181,8 @@ export default function SellerRemindersPage() {
       title: '',
       content: '',
       remindAt: now.toISOString().slice(0, 16),
-      appointmentId: appointments[0]?.id ?? ''
+      appointmentId: '',
+      leadId: ''
     });
     setIsModalOpen(true);
   };
@@ -139,14 +193,15 @@ export default function SellerRemindersPage() {
       title: r.title ?? '',
       content: r.content ?? '',
       remindAt: new Date(r.remindAt).toISOString().slice(0, 16),
-      appointmentId: r.appointment?.id ?? ''
+      appointmentId: r.appointment?.id ?? '',
+      leadId: r.lead?.id ?? ''
     });
     setIsModalOpen(true);
   };
 
   const handleSave = async (event: FormEvent) => {
     event.preventDefault();
-    if (!isSeller) return;
+    if (!canWrite) return;
     if (!formState.title.trim() || !formState.remindAt) return;
     setSaving(true);
     setError(null);
@@ -156,14 +211,16 @@ export default function SellerRemindersPage() {
           title: formState.title,
           content: formState.content || null,
           remindAt: new Date(formState.remindAt).toISOString(),
-          appointmentId: formState.appointmentId || null
+          appointmentId: formState.appointmentId || null,
+          leadId: formState.leadId || null
         });
       } else {
         await api.post('/seller-reminders', {
           title: formState.title,
           content: formState.content || null,
           remindAt: new Date(formState.remindAt).toISOString(),
-          appointmentId: formState.appointmentId || undefined
+          appointmentId: formState.appointmentId || undefined,
+          leadId: formState.leadId || undefined
         });
       }
       setIsModalOpen(false);
@@ -176,7 +233,7 @@ export default function SellerRemindersPage() {
   };
 
   const toggleDone = async (r: SellerReminderOverviewItem) => {
-    if (!isSeller) return;
+    if (!canWrite) return;
     setError(null);
     try {
       await api.patch(`/seller-reminders/${r.id}`, { status: r.status === 'DONE' ? 'PENDING' : 'DONE' });
@@ -187,7 +244,7 @@ export default function SellerRemindersPage() {
   };
 
   const handleDelete = async () => {
-    if (!isSeller || !toDelete) return;
+    if (!canWrite || !toDelete) return;
     setDeleting(true);
     setError(null);
     try {
@@ -215,22 +272,57 @@ export default function SellerRemindersPage() {
         <div>
           <h1 className="text-3xl font-semibold text-slate-900">Lembretes Seller</h1>
           <p className="text-sm text-gray-500">
-            {isSeller ? 'Registre lembretes com data e hora.' : 'Acompanhe os lembretes cadastrados pelos vendedores.'}
+            {isSeller
+              ? 'Registre lembretes com data e hora.'
+              : view === 'MY'
+                ? 'Crie lembretes internos da empresa.'
+                : 'Acompanhe os lembretes cadastrados pelos vendedores.'}
           </p>
         </div>
-        {isSeller ? (
-          <button
-            onClick={openCreate}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-dark"
-          >
-            Novo lembrete
-          </button>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          {!isSeller ? (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setView('MY');
+                  setSellerFilterId('');
+                }}
+                className={clsx(
+                  'rounded-lg border px-3 py-2 text-sm font-semibold transition',
+                  view === 'MY' ? 'border-primary bg-primary/10 text-primary' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-100'
+                )}
+              >
+                Meus lembretes
+              </button>
+              <button
+                type="button"
+                onClick={() => setView('SELLERS')}
+                className={clsx(
+                  'rounded-lg border px-3 py-2 text-sm font-semibold transition',
+                  view === 'SELLERS'
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-100'
+                )}
+              >
+                Lembretes dos vendedores
+              </button>
+            </>
+          ) : null}
+          {canWrite ? (
+            <button
+              onClick={openCreate}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-dark"
+            >
+              Novo lembrete
+            </button>
+          ) : null}
+        </div>
       </div>
 
       <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-end gap-3">
-          {!isSeller ? (
+          {!isSeller && view === 'SELLERS' ? (
             <label className="min-w-[220px] flex-1 text-xs font-semibold text-gray-600">
               Vendedor
               <select
@@ -309,7 +401,7 @@ export default function SellerRemindersPage() {
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-gray-900">{r.title}</p>
                     <p className="text-xs text-gray-500">{formatDateTime(r.remindAt)}</p>
-                    {!isSeller ? (
+                    {!isSeller && view === 'SELLERS' ? (
                       <p className="truncate text-xs font-semibold text-primary">{r.seller?.name ?? '--'}</p>
                     ) : null}
                   </div>
@@ -331,7 +423,7 @@ export default function SellerRemindersPage() {
                   </p>
                 ) : null}
                 {r.content ? <p className="whitespace-pre-wrap text-sm text-gray-700">{r.content}</p> : null}
-                {isSeller ? (
+                {canWrite ? (
                   <div className="flex flex-wrap gap-2">
                     <button
                       onClick={() => void toggleDone(r)}
@@ -366,19 +458,19 @@ export default function SellerRemindersPage() {
             <table className="w-full divide-y divide-gray-200">
               <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
                 <tr>
-                  {!isSeller ? <th className="px-6 py-3">Vendedor</th> : null}
+                  {!isSeller && view === 'SELLERS' ? <th className="px-6 py-3">Vendedor</th> : null}
                   <th className="px-6 py-3">Titulo</th>
                   <th className="px-6 py-3">Quando</th>
                   <th className="px-6 py-3">Status</th>
                   <th className="px-6 py-3">Call / Lead</th>
                   <th className="px-6 py-3">Conteudo</th>
-                  {isSeller ? <th className="px-6 py-3 text-right">Acoes</th> : null}
+                  {canWrite ? <th className="px-6 py-3 text-right">Acoes</th> : null}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-sm text-gray-700">
                 {reminders.map((r) => (
                   <tr key={r.id} className="hover:bg-gray-50">
-                    {!isSeller ? (
+                    {!isSeller && view === 'SELLERS' ? (
                       <td className="px-6 py-4">
                         <p className="font-semibold text-gray-900">{r.seller?.name ?? '--'}</p>
                         <p className="text-xs text-gray-500">{r.seller?.email ?? '--'}</p>
@@ -412,7 +504,7 @@ export default function SellerRemindersPage() {
                     <td className="px-6 py-4">
                       <p className="max-w-[520px] whitespace-pre-wrap">{r.content ?? '--'}</p>
                     </td>
-                    {isSeller ? (
+                    {canWrite ? (
                       <td className="px-6 py-4 text-right">
                         <div className="flex justify-end gap-2">
                           <button
@@ -474,7 +566,7 @@ export default function SellerRemindersPage() {
         </div>
       </div>
 
-      {isSeller ? (
+      {canWrite ? (
         <>
           <Modal
             title={editing ? 'Editar lembrete' : 'Novo lembrete'}
@@ -484,7 +576,7 @@ export default function SellerRemindersPage() {
               setIsModalOpen(false);
             }}
           >
-            {appointmentsLoading ? (
+            {appointmentsLoading || leadsLoading ? (
               <div className="flex items-center justify-center p-10">
                 <Loading />
               </div>
@@ -494,13 +586,55 @@ export default function SellerRemindersPage() {
                   Vincular a uma call (opcional)
                   <select
                     value={formState.appointmentId}
-                    onChange={(e) => setFormState((prev) => ({ ...prev, appointmentId: e.target.value }))}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      if (!id) {
+                        setFormState((prev) => ({ ...prev, appointmentId: '' }));
+                        return;
+                      }
+                      const a = appointments.find((x) => x.id === id);
+                      setFormState((prev) => ({
+                        ...prev,
+                        appointmentId: id,
+                        leadId: prev.leadId && a?.lead?.id && prev.leadId !== a.lead.id ? '' : prev.leadId
+                      }));
+                    }}
                     className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
                   >
                     <option value="">Sem call</option>
                     {appointments.map((a) => (
                       <option key={a.id} value={a.id}>
                         {(a.lead?.name ?? a.lead?.email ?? 'Lead') + ' • ' + formatDateTime(a.start)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-sm">
+                  Vincular a um lead (opcional)
+                  <select
+                    value={formState.leadId}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      if (!id) {
+                        setFormState((prev) => ({ ...prev, leadId: '' }));
+                        return;
+                      }
+                      const currentAppointment = formState.appointmentId
+                        ? appointments.find((a) => a.id === formState.appointmentId)
+                        : null;
+                      const shouldClearAppointment = currentAppointment?.lead?.id && currentAppointment.lead.id !== id;
+                      setFormState((prev) => ({
+                        ...prev,
+                        leadId: id,
+                        appointmentId: shouldClearAppointment ? '' : prev.appointmentId
+                      }));
+                    }}
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none"
+                  >
+                    <option value="">Sem lead</option>
+                    {leads.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.name ?? l.email ?? l.contact ?? 'Lead'}
                       </option>
                     ))}
                   </select>
