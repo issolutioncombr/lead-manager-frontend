@@ -589,6 +589,29 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
   useEffect(() => {
     const phone = selectedContact ? selectedContact.replace(/\D+/g, '') : '';
     const effectiveInstanceId = (instanceId || selectedOriginInstanceId || '').toString().trim();
+    if (!phone || !effectiveInstanceId) return;
+    let active = true;
+    api
+      .get<{ profilePicUrl: string | null }>('/integrations/evolution/messages/profile-pic', {
+        params: {
+          jid: (selectedRemoteJidRef.current ?? '').trim() || `${phone}@s.whatsapp.net`,
+          instanceId: effectiveInstanceId
+        }
+      })
+      .then((resp) => {
+        if (!active) return;
+        setSelectedAvatarUrl(resp.data.profilePicUrl ?? null);
+      })
+      .catch(() => {})
+      .finally(() => {});
+    return () => {
+      active = false;
+    };
+  }, [instanceId, selectedOriginInstanceId, selectedContact]);
+
+  useEffect(() => {
+    const phone = selectedContact ? selectedContact.replace(/\D+/g, '') : '';
+    const effectiveInstanceId = (instanceId || selectedOriginInstanceId || '').toString().trim();
     if (!phone || !effectiveInstanceId) {
       setAbPromptOptions([]);
       setAbSelectedPromptId(null);

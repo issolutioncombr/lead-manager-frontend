@@ -1,4 +1,5 @@
 import { ChatItem } from './types';
+import { Avatar } from './Avatar';
 
 export function ChatList(props: {
   instances: Array<{ id: string; name?: string | null }>;
@@ -106,13 +107,11 @@ export function ChatList(props: {
                     props.selectedContact === chat.contact ? 'bg-gray-50' : 'hover:bg-gray-50'
                   ].join(' ')}
                 >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-primary">
-                    {chat.avatarUrl ? (
-                      <img src={chat.avatarUrl} alt="" className="h-full w-full object-cover" />
-                    ) : (
-                      (chat.name ?? chat.contact ?? 'C')[0]
-                    )}
-                  </div>
+                  <Avatar
+                    url={chat.avatarUrl}
+                    label={(chat.name ?? chat.contact ?? 'C')[0] ?? 'C'}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-primary"
+                  />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <p className="truncate text-sm font-semibold">

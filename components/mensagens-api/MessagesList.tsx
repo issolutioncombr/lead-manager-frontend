@@ -1,4 +1,5 @@
 import { RenderedMessageItem } from './types';
+import { Avatar } from './Avatar';
 
 export function MessagesList(props: {
   selectedContact: string | null;
@@ -60,13 +61,11 @@ export function MessagesList(props: {
           return (
             <div key={it.id} className={`mb-2 flex ${isMine ? 'justify-end' : 'justify-start'}`}>
               {!isMine && (
-                <div className="mr-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs text-white">
-                  {props.incomingAvatarUrl ? (
-                    <img src={props.incomingAvatarUrl} alt="" className="h-full w-full rounded-full object-cover" />
-                  ) : (
-                    avatarLetter(contactLabel)
-                  )}
-                </div>
+                <Avatar
+                  url={props.incomingAvatarUrl}
+                  label={avatarLetter(contactLabel)}
+                  className="mr-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs text-white overflow-hidden"
+                />
               )}
               <div
                 className={[
@@ -96,13 +95,11 @@ export function MessagesList(props: {
                 </div>
               </div>
               {isMine && (
-                <div className="ml-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs text-white">
-                  {outboundAvatarUrl ? (
-                    <img src={outboundAvatarUrl} alt="" className="h-full w-full rounded-full object-cover" />
-                  ) : (
-                    avatarLetter(outboundLabel)
-                  )}
-                </div>
+                <Avatar
+                  url={outboundAvatarUrl}
+                  label={avatarLetter(outboundLabel)}
+                  className="ml-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs text-white overflow-hidden"
+                />
               )}
             </div>
           );
