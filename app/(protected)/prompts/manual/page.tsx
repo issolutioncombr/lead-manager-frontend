@@ -51,6 +51,14 @@ export default function ManualPromptsPage() {
   const [strategy, setStrategy] = useState('');
   const [businessRules, setBusinessRules] = useState('');
   const [serviceParameters, setServiceParameters] = useState('');
+  const [problemaCapilar, setProblemaCapilar] = useState('');
+  const [tempoTentativas, setTempoTentativas] = useState('');
+  const [periodo, setPeriodo] = useState('');
+  const [diaConfirmado, setDiaConfirmado] = useState('');
+  const [inicio, setInicio] = useState('');
+  const [fim, setFim] = useState('');
+  const [nomeCompleto, setNomeCompleto] = useState('');
+  const [email, setEmail] = useState('');
   const [timezone, setTimezone] = useState('America/Sao_Paulo');
   const [windowStart, setWindowStart] = useState('');
   const [windowEnd, setWindowEnd] = useState('');
@@ -84,6 +92,14 @@ export default function ManualPromptsPage() {
     setStrategy('');
     setBusinessRules('');
     setServiceParameters('');
+    setProblemaCapilar('');
+    setTempoTentativas('');
+    setPeriodo('');
+    setDiaConfirmado('');
+    setInicio('');
+    setFim('');
+    setNomeCompleto('');
+    setEmail('');
     setTimezone('America/Sao_Paulo');
     setWindowStart('');
     setWindowEnd('');
@@ -109,6 +125,14 @@ export default function ManualPromptsPage() {
       setStrategy(cfg.strategy ?? '');
       setBusinessRules(cfg.businessRules ?? '');
       setServiceParameters(cfg.serviceParameters ?? '');
+      setProblemaCapilar(cfg.flowVariables?.problema_capilar ?? '');
+      setTempoTentativas(cfg.flowVariables?.tempo_tentativas ?? '');
+      setPeriodo(cfg.flowVariables?.periodo ?? '');
+      setDiaConfirmado(cfg.flowVariables?.dia_confirmado ?? '');
+      setInicio(cfg.flowVariables?.inicio ?? '');
+      setFim(cfg.flowVariables?.fim ?? '');
+      setNomeCompleto(cfg.flowVariables?.nome_completo ?? '');
+      setEmail(cfg.flowVariables?.email ?? '');
       setTimezone(cfg.scheduling?.timezone ?? 'America/Sao_Paulo');
       setWindowStart(cfg.scheduling?.windowStart ?? '');
       setWindowEnd(cfg.scheduling?.windowEnd ?? '');
@@ -121,7 +145,20 @@ export default function ManualPromptsPage() {
     }
   };
 
-  const canSave = useMemo(() => agentName.trim().length > 0, [agentName]);
+  const canSave = useMemo(() => {
+    const required = [
+      agentName,
+      problemaCapilar,
+      tempoTentativas,
+      periodo,
+      diaConfirmado,
+      inicio,
+      fim,
+      nomeCompleto,
+      email
+    ];
+    return required.every((v) => String(v ?? '').trim().length > 0);
+  }, [agentName, problemaCapilar, tempoTentativas, periodo, diaConfirmado, inicio, fim, nomeCompleto, email]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -139,6 +176,16 @@ export default function ManualPromptsPage() {
       strategy: strategy.trim() || undefined,
       businessRules: businessRules.trim() || undefined,
       serviceParameters: serviceParameters.trim() || undefined,
+      flowVariables: {
+        problema_capilar: problemaCapilar.trim(),
+        tempo_tentativas: tempoTentativas.trim(),
+        periodo: periodo.trim(),
+        dia_confirmado: diaConfirmado.trim(),
+        inicio: inicio.trim(),
+        fim: fim.trim(),
+        nome_completo: nomeCompleto.trim(),
+        email: email.trim()
+      },
       faqs: faqs.filter((f) => f.question.trim() && f.answer.trim()),
       variables: vars,
       scheduling: {
@@ -257,6 +304,44 @@ export default function ManualPromptsPage() {
             <textarea value={serviceParameters} onChange={(e) => setServiceParameters(e.target.value)} rows={5} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none" />
           </label>
 
+          <div className="rounded-lg border border-gray-200 p-4">
+            <div className="mb-3 text-sm font-semibold text-slate-900">Variáveis do fluxo (obrigatórias)</div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="text-sm">
+                problema_capilar
+                <input value={problemaCapilar} onChange={(e) => setProblemaCapilar(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none" />
+              </label>
+              <label className="text-sm">
+                tempo_tentativas
+                <input value={tempoTentativas} onChange={(e) => setTempoTentativas(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none" />
+              </label>
+              <label className="text-sm">
+                periodo
+                <input value={periodo} onChange={(e) => setPeriodo(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none" />
+              </label>
+              <label className="text-sm">
+                dia_confirmado
+                <input value={diaConfirmado} onChange={(e) => setDiaConfirmado(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none" />
+              </label>
+              <label className="text-sm">
+                inicio (AAAA-MM-DDTHH:MM)
+                <input value={inicio} onChange={(e) => setInicio(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none" />
+              </label>
+              <label className="text-sm">
+                fim (AAAA-MM-DDTHH:MM)
+                <input value={fim} onChange={(e) => setFim(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none" />
+              </label>
+              <label className="text-sm">
+                nome_completo
+                <input value={nomeCompleto} onChange={(e) => setNomeCompleto(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none" />
+              </label>
+              <label className="text-sm">
+                email
+                <input value={email} onChange={(e) => setEmail(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none" />
+              </label>
+            </div>
+          </div>
+
           <div className="grid gap-3 md:grid-cols-2">
             <label className="text-sm">
               Timezone
@@ -336,4 +421,3 @@ export default function ManualPromptsPage() {
     </div>
   );
 }
-

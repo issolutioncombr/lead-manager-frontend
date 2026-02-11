@@ -15,7 +15,7 @@ type PendingUser = {
 
 export default function ApprovalsPage() {
   useProtectedRoute();
-  const { isAuthorized } = useRoleGuard(['admin']);
+  const { isAuthorized } = useRoleGuard(['Super-Admin']);
 
   const [items, setItems] = useState<PendingUser[]>([]);
   const [loading, setLoading] = useState(false);

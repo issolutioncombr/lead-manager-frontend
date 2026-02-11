@@ -258,19 +258,12 @@ export const Navbar = () => {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '');
     const isSuperAdmin = normalizedRole === 'superadmin';
-    const isAdmin = user?.isAdmin || user?.role === 'admin';
     const configIndex = items.findIndex((item) => item.type === 'group' && item.label === 'Configurações');
-    if (isAdmin && configIndex >= 0) {
+    if (isSuperAdmin && configIndex >= 0) {
       const configItem = items[configIndex];
       if (configItem.type === 'group') {
         configItem.children.push({ href: '/approvals', label: 'Aprovações' });
         configItem.children.push({ href: '/users', label: 'Usuários' });
-      }
-    }
-
-    if (isSuperAdmin && configIndex >= 0) {
-      const configItem = items[configIndex];
-      if (configItem.type === 'group') {
         configItem.children.push({ href: '/admin', label: 'Admin (Super)' });
       }
     }
@@ -294,7 +287,7 @@ export const Navbar = () => {
       .filter(Boolean) as NavItem[];
 
     return filteredItems;
-  }, [seller, sellerLinkActive, user?.isAdmin, user?.role]);
+  }, [seller, sellerLinkActive, user?.role]);
 
   const isGroupActive = (group: GroupItem) => group.children.some((c) => pathname.startsWith(c.href));
 

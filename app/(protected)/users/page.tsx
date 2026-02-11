@@ -18,7 +18,7 @@ type ListedUser = {
 
 export default function UsersPage() {
   useProtectedRoute();
-  const { isAuthorized } = useRoleGuard(['admin']);
+  const { isAuthorized } = useRoleGuard(['Super-Admin']);
 
   const [items, setItems] = useState<ListedUser[]>([]);
   const [loading, setLoading] = useState(false);
