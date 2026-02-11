@@ -231,6 +231,16 @@ const isMessagePayload = (value: unknown): value is Message => {
         setSelectedAvatarUrl(chatAvatarCacheRef.current[cacheKey] ?? null);
         return;
       }
+      if (!inst) {
+        const suffix = `|${jid}`;
+        for (const [k, v] of Object.entries(chatAvatarCacheRef.current)) {
+          if (!k.endsWith(suffix)) continue;
+          if (!v) continue;
+          chatAvatarCacheRef.current[cacheKey] = v;
+          setSelectedAvatarUrl(v);
+          return;
+        }
+      }
       const seq = ++avatarRequestSeqRef.current;
       try {
         const resp = await api.get<{ profilePicUrl: string | null }>('/integrations/evolution/messages/profile-pic', {
@@ -241,7 +251,7 @@ const isMessagePayload = (value: unknown): value is Message => {
         if (selectedContactRef.current !== n) return;
         const url = resp.data.profilePicUrl ?? null;
         chatAvatarCacheRef.current[cacheKey] = url;
-        setSelectedAvatarUrl(url);
+        if (url) setSelectedAvatarUrl(url);
       } catch {
         if (seq !== avatarRequestSeqRef.current) return;
         if (selectedContactRef.current !== n) return;
@@ -475,8 +485,8 @@ const isMessagePayload = (value: unknown): value is Message => {
 
   useEffect(() => {
     if (!selectedContact) return;
-    const effectiveInstanceId = (instanceIdRef.current || selectedOriginInstanceIdRef.current || '').toString().trim();
-    void fetchAvatarForSelectedContact(effectiveInstanceId || null);
+    const selectedInstanceId = (instanceIdRef.current || '').toString().trim();
+    void fetchAvatarForSelectedContact(selectedInstanceId || null);
   }, [fetchAvatarForSelectedContact, instanceId, selectedContact]);
  
    const filteredChats = useMemo(() => {
@@ -710,7 +720,7 @@ const isMessagePayload = (value: unknown): value is Message => {
         delete copy[n];
         return copy;
       });
-      void fetchAvatarForSelectedContact(effectiveInstanceId || originInstanceId || null);
+      void fetchAvatarForSelectedContact(effectiveInstanceId || null);
       await applyConversation(n, 50, { allowRetryLocal: true, remoteJid: remoteJid ?? null });
     },
     [applyConversation, fetchAvatarForSelectedContact, instances]
