@@ -3,12 +3,19 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
+import { getStoredAuth } from '../lib/auth-storage';
+
 export default function HomePage() {
   const router = useRouter();
 
   useEffect(() => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('clinicayance_token') : null;
-    router.replace(token ? '/dashboard' : '/login');
+    const stored = getStoredAuth();
+    if (!stored?.token) {
+      router.replace('/login');
+      return;
+    }
+
+    router.replace(stored.seller ? '/attendance' : '/dashboard');
   }, [router]);
 
   return (

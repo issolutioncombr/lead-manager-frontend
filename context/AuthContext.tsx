@@ -63,7 +63,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       setStoredAuth(data.accessToken, data.user, data.seller);
       setAuthState({ token: data.accessToken, user: data.user, seller: data.seller });
-      router.push('/dashboard');
+      router.push(data.seller ? '/attendance' : '/dashboard');
     },
     [router]
   );

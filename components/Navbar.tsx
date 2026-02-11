@@ -184,17 +184,28 @@ export const Navbar = () => {
   }, [pathname]);
 
   const navigationItems = useMemo<NavItem[]>(() => {
-    const items: NavItem[] = BASE_ITEMS.map((item) => {
-      if (item.type === 'link') return item;
-      return { ...item, children: [...item.children] };
-    });
-
     const attendanceLink: LinkItem = {
       type: 'link',
       href: '/attendance',
       label: seller ? 'Atendimento' : 'Agenda dos vendedores',
       icon: 'clock'
     };
+
+    if (seller) {
+      const appointmentsFromBase = BASE_ITEMS.find(
+        (item): item is LinkItem => item.type === 'link' && item.href === '/appointments'
+      );
+
+      const appointmentsLink: LinkItem =
+        appointmentsFromBase ?? ({ type: 'link', href: '/appointments', label: 'Video Chamadas', icon: 'calendar' } as const);
+
+      return [appointmentsLink, attendanceLink];
+    }
+
+    const items: NavItem[] = BASE_ITEMS.map((item) => {
+      if (item.type === 'link') return item;
+      return { ...item, children: [...item.children] };
+    });
 
     const appointmentsIndex = items.findIndex((item) => item.type === 'link' && item.href === '/appointments');
     if (appointmentsIndex >= 0) {
