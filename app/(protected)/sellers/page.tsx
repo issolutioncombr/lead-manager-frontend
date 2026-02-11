@@ -374,75 +374,132 @@ export default function SellersPage() {
       )}
 
       <div className="rounded-2xl bg-white shadow">
-        <div className="overflow-x-auto">
-          <table className="min-w-[760px] w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
-            <tr>
-              <th className="px-6 py-3">Nome</th>
-              <th className="px-6 py-3">Email</th>
-              <th className="px-6 py-3">Contato</th>
-              <th className="px-6 py-3">Cadastro</th>
-              <th className="px-6 py-3 text-right">Acoes</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100 text-sm text-gray-700">
+        <div className="block lg:hidden">
+          <div className="divide-y divide-gray-100">
             {isLoading ? (
-              <tr>
-                <td colSpan={5} className="px-6 py-6 text-center text-gray-500">
-                  Carregando vendedores...
-                </td>
-              </tr>
+              <div className="p-4 text-sm text-gray-500">Carregando vendedores...</div>
             ) : sellers.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-6 py-6 text-center text-gray-500">
-                  Nenhum vendedor encontrado.
-                </td>
-              </tr>
+              <div className="p-4 text-sm text-gray-500">Nenhum vendedor encontrado.</div>
             ) : (
               sellers.map((seller) => (
-                <tr key={seller.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4">
-                    <p className="max-w-[220px] truncate font-semibold">{seller.name}</p>
-                  </td>
-                  <td className="px-6 py-4">
-                    <p className="max-w-[260px] truncate text-sm text-gray-500">{seller.email ?? '--'}</p>
-                  </td>
-                  <td className="px-6 py-4">
-                    <p className="max-w-[180px] truncate text-sm text-gray-500">{seller.contactNumber ?? '--'}</p>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">{formatDate(seller.createdAt)}</td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex justify-end gap-2">
-                      <button
-                        onClick={() => handleManageAgenda(seller.id)}
-                        className="rounded-lg border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-500 transition hover:bg-gray-100"
-                      >
-                        Gerenciar agenda
-                      </button>
-                      <button
-                        onClick={() => void openLinkModal(seller)}
-                        className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-1 text-xs font-semibold text-primary transition hover:bg-primary/10"
-                      >
-                        Vincular video chamada
-                      </button>
-                      <button
-                        onClick={() => openModal(seller)}
-                        className="rounded-lg border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-500 transition hover:bg-gray-100"
-                      >
-                        Atualizar
-                      </button>
-                      <button
-                        onClick={() => requestDeleteSeller(seller)}
-                        className="rounded-lg border border-red-200 px-3 py-1 text-xs font-semibold text-red-500 transition hover:bg-red-50"
-                      >
-                        Remover
-                      </button>
+                <div key={seller.id} className="space-y-3 p-4">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-gray-900">{seller.name}</p>
+                    <p className="truncate text-xs text-gray-500">{seller.email ?? '--'}</p>
+                  </div>
+
+                  <div className="grid gap-2 text-xs text-gray-600">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-semibold text-gray-500">Contato</span>
+                      <span className="truncate">{seller.contactNumber ?? '--'}</span>
                     </div>
-                  </td>
-                </tr>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-semibold text-gray-500">Cadastro</span>
+                      <span className="whitespace-nowrap">{formatDate(seller.createdAt)}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => handleManageAgenda(seller.id)}
+                      className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 transition hover:bg-gray-100"
+                    >
+                      Gerenciar agenda
+                    </button>
+                    <button
+                      onClick={() => void openLinkModal(seller)}
+                      className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs font-semibold text-primary transition hover:bg-primary/10"
+                    >
+                      Vincular video chamada
+                    </button>
+                    <button
+                      onClick={() => openModal(seller)}
+                      className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 transition hover:bg-gray-100"
+                    >
+                      Atualizar
+                    </button>
+                    <button
+                      onClick={() => requestDeleteSeller(seller)}
+                      className="rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50"
+                    >
+                      Remover
+                    </button>
+                  </div>
+                </div>
               ))
             )}
-          </tbody>
+          </div>
+        </div>
+
+        <div className="hidden lg:block">
+          <table className="w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+              <tr>
+                <th className="px-6 py-3">Nome</th>
+                <th className="px-6 py-3">Email</th>
+                <th className="px-6 py-3">Contato</th>
+                <th className="px-6 py-3">Cadastro</th>
+                <th className="px-6 py-3 text-right">Acoes</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 text-sm text-gray-700">
+              {isLoading ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-6 text-center text-gray-500">
+                    Carregando vendedores...
+                  </td>
+                </tr>
+              ) : sellers.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-6 text-center text-gray-500">
+                    Nenhum vendedor encontrado.
+                  </td>
+                </tr>
+              ) : (
+                sellers.map((seller) => (
+                  <tr key={seller.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4">
+                      <p className="max-w-[220px] truncate font-semibold">{seller.name}</p>
+                    </td>
+                    <td className="px-6 py-4">
+                      <p className="max-w-[260px] truncate text-sm text-gray-500">{seller.email ?? '--'}</p>
+                    </td>
+                    <td className="px-6 py-4">
+                      <p className="max-w-[180px] truncate text-sm text-gray-500">{seller.contactNumber ?? '--'}</p>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-500">{formatDate(seller.createdAt)}</td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => handleManageAgenda(seller.id)}
+                          className="rounded-lg border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-500 transition hover:bg-gray-100"
+                        >
+                          Gerenciar agenda
+                        </button>
+                        <button
+                          onClick={() => void openLinkModal(seller)}
+                          className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-1 text-xs font-semibold text-primary transition hover:bg-primary/10"
+                        >
+                          Vincular video chamada
+                        </button>
+                        <button
+                          onClick={() => openModal(seller)}
+                          className="rounded-lg border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-500 transition hover:bg-gray-100"
+                        >
+                          Atualizar
+                        </button>
+                        <button
+                          onClick={() => requestDeleteSeller(seller)}
+                          className="rounded-lg border border-red-200 px-3 py-1 text-xs font-semibold text-red-500 transition hover:bg-red-50"
+                        >
+                          Remover
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
           </table>
         </div>
       </div>

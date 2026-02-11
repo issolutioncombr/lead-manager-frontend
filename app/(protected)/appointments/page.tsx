@@ -242,6 +242,26 @@ export default function AppointmentsPage() {
     }
   };
 
+  const revokeLink = async () => {
+    if (seller) return;
+    const currentLink = linkingAppointment?.sellerVideoCallAccesses?.[0];
+    if (!linkingAppointment || !currentLink) return;
+    setLinkIsLoading(true);
+    setLinkError(null);
+    setLinkSuccess(null);
+    try {
+      await api.delete(`/sellers/${currentLink.sellerId}/video-call-links/${currentLink.id}`);
+      setLinkSuccess('Vinculo removido com sucesso.');
+      setLinkSelectedSellerId('');
+      setLinkingAppointment((prev) => (prev ? { ...prev, sellerVideoCallAccesses: [] } : prev));
+      void fetchAppointments({ page: currentPageRef.current });
+    } catch {
+      setLinkError('Erro ao remover vinculo.');
+    } finally {
+      setLinkIsLoading(false);
+    }
+  };
+
   const handleLeadSelection = (lead: Lead) => {
     setFormState((prev) => ({ ...prev, leadId: lead.id }));
     setSelectedLeadInfo(lead);
@@ -431,100 +451,184 @@ export default function AppointmentsPage() {
       )}
 
       <div className="rounded-2xl bg-white shadow">
-        <div className="overflow-x-auto">
-          <table className="min-w-[960px] w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
-            <tr>
-              <th className="px-6 py-3">Lead</th>
-              <th className="px-6 py-3">Contato</th>
-              <th className="px-6 py-3">Inicio</th>
-              <th className="px-6 py-3">Fim</th>
-              <th className="px-6 py-3">Link</th>
-              <th className="px-6 py-3">Agendada</th>
-              <th className="px-6 py-3">Status</th>
-              <th className="px-6 py-3">Status do lead</th>
-              <th className="px-6 py-3 text-right">Acoes</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100 text-sm text-gray-700">
+        <div className="block lg:hidden">
+          <div className="divide-y divide-gray-100">
             {isLoading ? (
-              <tr>
-                <td colSpan={9} className="px-6 py-6 text-center text-gray-500">
-                  Carregando...
-                </td>
-              </tr>
+              <div className="p-4 text-sm text-gray-500">Carregando...</div>
             ) : appointments.length === 0 ? (
-              <tr>
-                <td colSpan={9} className="px-6 py-6 text-center text-gray-500">
-                  Nenhuma call encontrada.
-                </td>
-              </tr>
+              <div className="p-4 text-sm text-gray-500">Nenhuma call encontrada.</div>
             ) : (
               appointments.map((appointment) => (
-                <tr key={appointment.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <p className="max-w-[240px] truncate font-semibold">{appointment.lead.name ?? 'Sem nome'}</p>
-                    <p className="max-w-[240px] truncate text-xs text-gray-400">{appointment.lead.email ?? '--'}</p>
-                    {appointment.sellerVideoCallAccesses?.[0]?.seller ? (
-                      <p className="mt-1 max-w-[240px] truncate text-xs font-semibold text-primary">
-                        Vinculado: {appointment.sellerVideoCallAccesses[0].seller.name}
+                <div key={appointment.id} className="space-y-3 p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-gray-900">
+                        {appointment.lead.name ?? appointment.lead.email ?? 'Sem nome'}
                       </p>
-                    ) : null}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
-                    <span className="block max-w-[180px] truncate">{appointment.lead.contact ?? '--'}</span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">{formatDateTime(appointment.start)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">{formatDateTime(appointment.end)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {appointment.meetLink ? (
-                      <a
-                        href={appointment.meetLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-primary underline"
-                      >
-                        Abrir link
-                      </a>
-                    ) : (
-                      '--'
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">{formatDateTime(appointment.createdAt)}</td>
-                  <td className="px-6 py-4">
-                    <StatusBadge value={appointment.status} />
-                  </td>
-                  <td className="px-6 py-4">
-                    {appointment.lead.stage ? <StatusBadge value={appointment.lead.stage} /> : '--'}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex justify-end gap-2">
-                      {!seller && (
-                        <button
-                          onClick={() => void openLinkModal(appointment)}
-                          className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-1 text-xs font-semibold text-primary transition hover:bg-primary/10"
-                        >
-                          {appointment.sellerVideoCallAccesses?.length ? 'Trocar vendedor' : 'Vincular vendedor'}
-                        </button>
-                      )}
-                      <button
-                        onClick={() => openModal(appointment)}
-                        className="rounded-lg border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-500 transition hover:bg-gray-100"
-                      >
-                        Atualizar
-                      </button>
-                      <button
-                        onClick={() => requestDeleteAppointment(appointment)}
-                        className="rounded-lg border border-red-200 px-3 py-1 text-xs font-semibold text-red-500 transition hover:bg-red-50"
-                      >
-                        Remover
-                      </button>
+                      <p className="truncate text-xs text-gray-500">{appointment.lead.email ?? '--'}</p>
+                      {appointment.sellerVideoCallAccesses?.[0]?.seller ? (
+                        <p className="mt-1 truncate text-xs font-semibold text-primary">
+                          Vinculado: {appointment.sellerVideoCallAccesses[0].seller.name}
+                        </p>
+                      ) : null}
                     </div>
-                  </td>
-                </tr>
+                    <div className="flex items-center gap-2">
+                      <StatusBadge value={appointment.status} />
+                      {appointment.lead.stage ? <StatusBadge value={appointment.lead.stage} /> : null}
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2 text-xs text-gray-600">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-semibold text-gray-500">Contato</span>
+                      <span className="truncate">{appointment.lead.contact ?? '--'}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-semibold text-gray-500">Inicio</span>
+                      <span className="whitespace-nowrap">{formatDateTime(appointment.start)}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-semibold text-gray-500">Fim</span>
+                      <span className="whitespace-nowrap">{formatDateTime(appointment.end)}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-semibold text-gray-500">Agendada</span>
+                      <span className="whitespace-nowrap">{formatDateTime(appointment.createdAt)}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-semibold text-gray-500">Link</span>
+                      {appointment.meetLink ? (
+                        <a
+                          href={appointment.meetLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="max-w-[60%] truncate font-semibold text-primary underline"
+                        >
+                          Abrir link
+                        </a>
+                      ) : (
+                        <span>--</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {!seller && (
+                      <button
+                        onClick={() => void openLinkModal(appointment)}
+                        className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs font-semibold text-primary transition hover:bg-primary/10"
+                      >
+                        {appointment.sellerVideoCallAccesses?.length ? 'Trocar vendedor' : 'Vincular vendedor'}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => openModal(appointment)}
+                      className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 transition hover:bg-gray-100"
+                    >
+                      Atualizar
+                    </button>
+                    <button
+                      onClick={() => requestDeleteAppointment(appointment)}
+                      className="rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50"
+                    >
+                      Remover
+                    </button>
+                  </div>
+                </div>
               ))
             )}
-          </tbody>
+          </div>
+        </div>
+
+        <div className="hidden lg:block">
+          <table className="w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+              <tr>
+                <th className="px-6 py-3">Lead</th>
+                <th className="px-6 py-3">Contato</th>
+                <th className="px-6 py-3">Inicio</th>
+                <th className="px-6 py-3">Fim</th>
+                <th className="px-6 py-3">Link</th>
+                <th className="px-6 py-3">Agendada</th>
+                <th className="px-6 py-3">Status</th>
+                <th className="px-6 py-3">Status do lead</th>
+                <th className="px-6 py-3 text-right">Acoes</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 text-sm text-gray-700">
+              {isLoading ? (
+                <tr>
+                  <td colSpan={9} className="px-6 py-6 text-center text-gray-500">
+                    Carregando...
+                  </td>
+                </tr>
+              ) : appointments.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-6 py-6 text-center text-gray-500">
+                    Nenhuma call encontrada.
+                  </td>
+                </tr>
+              ) : (
+                appointments.map((appointment) => (
+                  <tr key={appointment.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <p className="max-w-[240px] truncate font-semibold">{appointment.lead.name ?? 'Sem nome'}</p>
+                      <p className="max-w-[240px] truncate text-xs text-gray-400">{appointment.lead.email ?? '--'}</p>
+                      {appointment.sellerVideoCallAccesses?.[0]?.seller ? (
+                        <p className="mt-1 max-w-[240px] truncate text-xs font-semibold text-primary">
+                          Vinculado: {appointment.sellerVideoCallAccesses[0].seller.name}
+                        </p>
+                      ) : null}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
+                      <span className="block max-w-[180px] truncate">{appointment.lead.contact ?? '--'}</span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">{formatDateTime(appointment.start)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">{formatDateTime(appointment.end)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {appointment.meetLink ? (
+                        <a href={appointment.meetLink} target="_blank" rel="noreferrer" className="text-primary underline">
+                          Abrir link
+                        </a>
+                      ) : (
+                        '--'
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">{formatDateTime(appointment.createdAt)}</td>
+                    <td className="px-6 py-4">
+                      <StatusBadge value={appointment.status} />
+                    </td>
+                    <td className="px-6 py-4">
+                      {appointment.lead.stage ? <StatusBadge value={appointment.lead.stage} /> : '--'}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex justify-end gap-2">
+                        {!seller && (
+                          <button
+                            onClick={() => void openLinkModal(appointment)}
+                            className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-1 text-xs font-semibold text-primary transition hover:bg-primary/10"
+                          >
+                            {appointment.sellerVideoCallAccesses?.length ? 'Trocar vendedor' : 'Vincular vendedor'}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => openModal(appointment)}
+                          className="rounded-lg border border-gray-200 px-3 py-1 text-xs font-semibold text-gray-500 transition hover:bg-gray-100"
+                        >
+                          Atualizar
+                        </button>
+                        <button
+                          onClick={() => requestDeleteAppointment(appointment)}
+                          className="rounded-lg border border-red-200 px-3 py-1 text-xs font-semibold text-red-500 transition hover:bg-red-50"
+                        >
+                          Remover
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
           </table>
         </div>
       </div>
@@ -739,6 +843,21 @@ export default function AppointmentsPage() {
               <p className="font-semibold text-gray-900">{linkingAppointment.lead.name ?? 'Sem nome'}</p>
               <p className="text-xs text-gray-500">{linkingAppointment.lead.contact ?? '--'}</p>
               <p className="text-xs text-gray-500">{formatDateTime(linkingAppointment.start)}</p>
+            </div>
+          ) : null}
+
+          {!seller && linkingAppointment?.sellerVideoCallAccesses?.[0]?.seller ? (
+            <div className="rounded-lg border border-gray-200 bg-white p-3 text-sm">
+              <p className="text-xs font-semibold uppercase text-gray-500">Vinculo atual</p>
+              <p className="font-semibold text-gray-900">{linkingAppointment.sellerVideoCallAccesses[0].seller.name}</p>
+              <button
+                type="button"
+                onClick={() => void revokeLink()}
+                disabled={linkSellersLoading || linkIsLoading || !!linkSuccess}
+                className="mt-2 w-full rounded-lg border border-red-200 px-4 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {linkIsLoading ? 'Removendo...' : 'Remover vinculo'}
+              </button>
             </div>
           ) : null}
 

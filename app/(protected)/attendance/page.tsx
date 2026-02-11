@@ -287,16 +287,18 @@ const SellerAttendanceManager = () => {
                   key={date.toDateString()}
                   type="button"
                   onClick={() => handleSelectDate(date)}
-                    className={clsx(
+                  className={clsx(
                       'flex h-24 min-h-[6rem] flex-col rounded-xl border px-3 py-2 text-left transition sm:h-32 sm:min-h-[8rem] sm:px-4 sm:py-3',
                       isCurrentMonth ? 'bg-white' : 'bg-gray-50 text-gray-400',
                       isSelected && 'border-primary bg-primary/10 text-primary',
-                      isTodayDate && 'border-primary/70'
+                      isTodayDate && 'ring-2 ring-blue-500 ring-inset'
                     )}
                 >
                   <div className="flex items-center justify-between text-sm font-semibold">
-                    <span>{date.getDate()}</span>
-                    {isTodayDate && <span className="text-[10px] uppercase text-primary">Hoje</span>}
+                    <span className={clsx(isTodayDate && 'text-blue-700 underline decoration-blue-500 underline-offset-4')}>
+                      {date.getDate()}
+                    </span>
+                    {isTodayDate && <span className="text-[10px] uppercase text-blue-600">Hoje</span>}
                   </div>
                   {dateSlots.length === 0 ? (
                     <p className="mt-auto text-[11px] text-gray-400">Sem horarios</p>
@@ -457,6 +459,9 @@ const CompanyAttendanceOverview = ({ initialSellerId }: { initialSellerId?: stri
   const [saving, setSaving] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [initialApplied, setInitialApplied] = useState(false);
+  const [tableSearch, setTableSearch] = useState('');
+  const [tableSellerFilterId, setTableSellerFilterId] = useState('');
+  const [tableOnlyCurrentMonth, setTableOnlyCurrentMonth] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -553,6 +558,70 @@ const CompanyAttendanceOverview = ({ initialSellerId }: { initialSellerId?: stri
     const key = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
     return appointmentsByDay.get(key) ?? [];
   }, [appointmentsByDay, selectedDate]);
+
+  const availabilityRows = useMemo(() => {
+    const normalizedSearch = tableSearch.trim().toLowerCase();
+    const rows: Array<{
+      key: string;
+      sellerId: string;
+      sellerName: string;
+      sellerEmail: string | null;
+      date: Date | null;
+      dateLabel: string;
+      startTime: string;
+      endTime: string;
+    }> = [];
+
+    sellers.forEach((seller) => {
+      if (tableSellerFilterId && seller.id !== tableSellerFilterId) return;
+      const sellerName = seller.name ?? '';
+      const sellerEmail = seller.email ?? null;
+      if (normalizedSearch) {
+        const hay = `${sellerName} ${sellerEmail ?? ''}`.toLowerCase();
+        if (!hay.includes(normalizedSearch)) return;
+      }
+
+      seller.availabilitySlots.forEach((slot) => {
+        const date =
+          slot.specificDate
+            ? new Date(slot.specificDate)
+            : slot.dayOfMonth
+              ? new Date(currentMonth.getFullYear(), currentMonth.getMonth(), slot.dayOfMonth)
+              : null;
+
+        if (tableOnlyCurrentMonth && date) {
+          if (date.getFullYear() !== currentMonth.getFullYear() || date.getMonth() !== currentMonth.getMonth()) {
+            return;
+          }
+        }
+
+        const dateLabel = date
+          ? date.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' })
+          : slot.day;
+
+        rows.push({
+          key: `${seller.id}-${slot.id}`,
+          sellerId: seller.id,
+          sellerName,
+          sellerEmail,
+          date,
+          dateLabel,
+          startTime: slot.startTime,
+          endTime: slot.endTime
+        });
+      });
+    });
+
+    rows.sort((a, b) => {
+      const ad = a.date?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      const bd = b.date?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      if (ad !== bd) return ad - bd;
+      if (a.sellerName !== b.sellerName) return a.sellerName.localeCompare(b.sellerName);
+      return a.startTime.localeCompare(b.startTime);
+    });
+
+    return rows;
+  }, [currentMonth, sellers, tableOnlyCurrentMonth, tableSearch, tableSellerFilterId]);
 
   const selectedSeller = selectedSellerId ? sellers.find((seller) => seller.id === selectedSellerId) ?? null : null;
 
@@ -671,90 +740,93 @@ const CompanyAttendanceOverview = ({ initialSellerId }: { initialSellerId?: stri
           horarios aqui.
         </div>
       ) : (
-        <div className="grid gap-8 lg:grid-cols-[3fr,1fr]">
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => handleMonthChange(-1)}
-                className="rounded-full border border-gray-200 px-3 py-1 text-sm font-semibold text-gray-600 transition hover:bg-gray-100"
-              >
-                Mes anterior
-              </button>
-              <p className="text-lg font-semibold text-gray-900">
-                {currentMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
-              </p>
-              <button
-                type="button"
-                onClick={() => handleMonthChange(1)}
-                className="rounded-full border border-gray-200 px-3 py-1 text-sm font-semibold text-gray-600 transition hover:bg-gray-100"
-              >
-                Proximo mes
-              </button>
-            </div>
+        <div className="space-y-8">
+          <div className="grid gap-8 lg:grid-cols-[3fr,1fr]">
+            <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+              <div className="mb-4 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => handleMonthChange(-1)}
+                  className="rounded-full border border-gray-200 px-3 py-1 text-sm font-semibold text-gray-600 transition hover:bg-gray-100"
+                >
+                  Mes anterior
+                </button>
+                <p className="text-lg font-semibold text-gray-900">
+                  {currentMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => handleMonthChange(1)}
+                  className="rounded-full border border-gray-200 px-3 py-1 text-sm font-semibold text-gray-600 transition hover:bg-gray-100"
+                >
+                  Proximo mes
+                </button>
+              </div>
 
-            <div className="grid grid-cols-7 text-center text-xs font-semibold uppercase text-gray-400">
-              {calendarWeekHeaders.map((label) => (
-                <div key={label} className="py-2">
-                  {label}
-                </div>
-              ))}
-            </div>
+              <div className="grid grid-cols-7 text-center text-xs font-semibold uppercase text-gray-400">
+                {calendarWeekHeaders.map((label) => (
+                  <div key={label} className="py-2">
+                    {label}
+                  </div>
+                ))}
+              </div>
 
-            <div className="grid grid-cols-7 gap-2">
-              {calendarDays.map((date) => {
-                const isCurrentMonth = date.getMonth() === currentMonth.getMonth();
-                const isTodayDate = isSameDay(date, today);
-                const isSelected = isSameDay(date, selectedDate);
-                const sellersInDay = getSellersWithSlotsForDate(date);
-                const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-                const dateAppointments = appointmentsByDay.get(key) ?? [];
+              <div className="grid grid-cols-7 gap-2">
+                {calendarDays.map((date) => {
+                  const isCurrentMonth = date.getMonth() === currentMonth.getMonth();
+                  const isTodayDate = isSameDay(date, today);
+                  const isSelected = isSameDay(date, selectedDate);
+                  const sellersInDay = getSellersWithSlotsForDate(date);
+                  const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                  const dateAppointments = appointmentsByDay.get(key) ?? [];
 
-                return (
-                  <button
-                    key={date.toDateString()}
-                    type="button"
-                    onClick={() => handleSelectDate(date)}
-                    className={clsx(
-                      'flex h-24 min-h-[6rem] flex-col rounded-xl border px-3 py-2 text-left transition sm:h-32 sm:min-h-[8rem] sm:px-4 sm:py-3',
-                      isCurrentMonth ? 'bg-white' : 'bg-gray-50 text-gray-400',
-                      isSelected && 'border-primary bg-primary/10 text-primary',
-                      isTodayDate && 'border-primary/70'
-                    )}
-                  >
-                    <div className="flex items-center justify-between text-sm font-semibold">
-                      <span>{date.getDate()}</span>
-                      {isTodayDate && <span className="text-[10px] uppercase text-primary">Hoje</span>}
-                    </div>
-                    {sellersInDay.length === 0 ? (
-                      <p className="mt-auto text-[11px] text-gray-400">Sem vendedores</p>
-                    ) : (
-                      <>
-                        <p className="mt-auto text-[11px] text-primary">
-                          {`${sellersInDay.length} vendedor${sellersInDay.length === 1 ? '' : 'es'}`}
-                        </p>
-                        <div className="text-[10px] text-gray-500">
-                          {sellersInDay.slice(0, 2).map((entry) => (
-                            <p key={entry.id} className="truncate">
-                              {entry.name}
-                            </p>
-                          ))}
-                          {sellersInDay.length > 2 ? <p>+{sellersInDay.length - 2} outros</p> : null}
-                        </div>
-                      </>
-                    )}
-                    {dateAppointments.length ? (
-                      <div className={clsx('text-[11px]', isSelected ? 'text-primary' : 'text-gray-700')}>
-                        {dateAppointments.length} call{dateAppointments.length === 1 ? '' : 's'}
+                  return (
+                    <button
+                      key={date.toDateString()}
+                      type="button"
+                      onClick={() => handleSelectDate(date)}
+                      className={clsx(
+                        'flex h-24 min-h-[6rem] flex-col rounded-xl border px-3 py-2 text-left transition sm:h-32 sm:min-h-[8rem] sm:px-4 sm:py-3',
+                        isCurrentMonth ? 'bg-white' : 'bg-gray-50 text-gray-400',
+                        isSelected && 'border-primary bg-primary/10 text-primary',
+                        isTodayDate && 'ring-2 ring-blue-500 ring-inset'
+                      )}
+                    >
+                      <div className="flex items-center justify-between text-sm font-semibold">
+                        <span className={clsx(isTodayDate && 'text-blue-700 underline decoration-blue-500 underline-offset-4')}>
+                          {date.getDate()}
+                        </span>
+                        {isTodayDate && <span className="text-[10px] uppercase text-blue-600">Hoje</span>}
                       </div>
-                    ) : null}
-                  </button>
-                );
-              })}
+                      {sellersInDay.length === 0 ? (
+                        <p className="mt-auto text-[11px] text-gray-400">Sem vendedores</p>
+                      ) : (
+                        <>
+                          <p className="mt-auto text-[11px] text-primary">
+                            {`${sellersInDay.length} vendedor${sellersInDay.length === 1 ? '' : 'es'}`}
+                          </p>
+                          <div className="text-[10px] text-gray-500">
+                            {sellersInDay.slice(0, 2).map((entry) => (
+                              <p key={entry.id} className="truncate">
+                                {entry.name}
+                              </p>
+                            ))}
+                            {sellersInDay.length > 2 ? <p>+{sellersInDay.length - 2} outros</p> : null}
+                          </div>
+                        </>
+                      )}
+                      {dateAppointments.length ? (
+                        <div className={clsx('text-[11px]', isSelected ? 'text-primary' : 'text-gray-700')}>
+                          {dateAppointments.length} call{dateAppointments.length === 1 ? '' : 's'}
+                        </div>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
 
-          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
             <p className="text-xs uppercase text-gray-500">Data selecionada</p>
             <p className="text-xl font-semibold text-gray-900">
               {selectedDate.toLocaleDateString('pt-BR', {
@@ -919,6 +991,104 @@ const CompanyAttendanceOverview = ({ initialSellerId }: { initialSellerId?: stri
                 </button>
               </form>
             </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Horarios por vendedor</h2>
+                <p className="text-sm text-gray-500">Tabela consolidada com filtro por vendedor.</p>
+              </div>
+              <p className="text-sm font-semibold text-gray-700">{availabilityRows.length} horario(s)</p>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-end gap-3">
+              <label className="min-w-[220px] flex-1 text-xs font-semibold text-gray-600">
+                Buscar vendedor
+                <input
+                  value={tableSearch}
+                  onChange={(e) => setTableSearch(e.target.value)}
+                  placeholder="Nome ou email"
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+                />
+              </label>
+
+              <label className="min-w-[220px] text-xs font-semibold text-gray-600">
+                Vendedor
+                <select
+                  value={tableSellerFilterId}
+                  onChange={(e) => setTableSellerFilterId(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+                >
+                  <option value="">Todos</option>
+                  {sellers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="flex items-center gap-2 text-xs font-semibold text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={tableOnlyCurrentMonth}
+                  onChange={(e) => setTableOnlyCurrentMonth(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                />
+                Apenas mes selecionado
+              </label>
+            </div>
+
+            {availabilityRows.length === 0 ? (
+              <div className="mt-6 rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">
+                Nenhum horario encontrado para os filtros aplicados.
+              </div>
+            ) : (
+              <div className="mt-6">
+                <div className="block lg:hidden space-y-2">
+                  {availabilityRows.map((row) => (
+                    <div key={row.key} className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+                      <p className="truncate text-sm font-semibold text-gray-900">{row.sellerName}</p>
+                      <p className="text-xs text-gray-500">{row.sellerEmail ?? '--'}</p>
+                      <div className="mt-2 flex items-center justify-between gap-3 text-xs text-gray-600">
+                        <span className="truncate">{row.dateLabel}</span>
+                        <span className="whitespace-nowrap font-semibold text-gray-800">
+                          {row.startTime} - {row.endTime}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="hidden lg:block">
+                  <table className="w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+                      <tr>
+                        <th className="px-4 py-3">Vendedor</th>
+                        <th className="px-4 py-3">Data</th>
+                        <th className="px-4 py-3">Inicio</th>
+                        <th className="px-4 py-3">Fim</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 text-sm text-gray-700">
+                      {availabilityRows.map((row) => (
+                        <tr key={row.key}>
+                          <td className="px-4 py-3">
+                            <p className="font-semibold text-gray-900">{row.sellerName}</p>
+                            <p className="text-xs text-gray-500">{row.sellerEmail ?? '--'}</p>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">{row.dateLabel}</td>
+                          <td className="px-4 py-3 whitespace-nowrap">{row.startTime}</td>
+                          <td className="px-4 py-3 whitespace-nowrap">{row.endTime}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
