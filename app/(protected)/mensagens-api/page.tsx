@@ -53,6 +53,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
   const selectedOriginInstanceIdRef = useRef<string | null>(null);
   const conversationRequestSeqRef = useRef(0);
   const messagesRef = useRef<Message[]>([]);
+  const instanceIdRef = useRef<string>('');
   const lastCursorRef = useRef<{ lastTimestamp: string; lastUpdatedAt: string }>({
     lastTimestamp: new Date(0).toISOString(),
     lastUpdatedAt: new Date(0).toISOString()
@@ -64,6 +65,10 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
  
    const normalizedPhone = useMemo(() => (selectedContact ?? '').replace(/\D+/g, ''), [selectedContact]);
  
+  useEffect(() => {
+    instanceIdRef.current = instanceId;
+  }, [instanceId]);
+
   const resetConversationView = useCallback(() => {
     setSelectedContact(null);
     selectedContactRef.current = null;
@@ -91,6 +96,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
 
   const handleInstanceChange = useCallback(
     (id: string) => {
+      instanceIdRef.current = id;
       setInstanceId(id);
       resetConversationView();
     },
@@ -209,7 +215,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
       afterTimestamp: cursor.lastTimestamp,
       afterUpdatedAt: cursor.lastUpdatedAt,
       limit: '200',
-      instanceId: (instanceId || selectedOriginInstanceIdRef.current || '') as any
+      instanceId: (instanceIdRef.current || selectedOriginInstanceIdRef.current || '') as any
     });
 
     const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
@@ -266,7 +272,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
       }
     }
     setStreamConnected(false);
-  }, [applyIncomingMessages, buildApiUrl, instanceId]);
+  }, [applyIncomingMessages, buildApiUrl]);
  
    useEffect(() => {
      const loadInstances = async () => {
@@ -386,7 +392,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
      if (!phone || phone.length < 7) return;
      try {
        const params: Record<string, any> = { phone };
-       const effectiveInstanceId = instanceId || selectedOriginInstanceIdRef.current || '';
+       const effectiveInstanceId = instanceIdRef.current || selectedOriginInstanceIdRef.current || '';
        if (effectiveInstanceId) params.instanceId = effectiveInstanceId;
         if (remoteJid) params.remoteJid = remoteJid;
        if (directionFilter !== 'all') params.direction = directionFilter;
@@ -404,7 +410,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
       setError(`Não foi possível carregar a conversa${status ? ` (código ${status})` : ''}.`);
      } finally {
      }
-  }, [directionFilter, instanceId, preferLocal]);
+ }, [directionFilter, preferLocal]);
 
   const applyConversation = useCallback(async (contact: string, limit: number, opts?: { preserveScroll?: boolean; allowRetryLocal?: boolean; remoteJid?: string | null }) => {
     const requestSeq = ++conversationRequestSeqRef.current;
@@ -472,7 +478,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
       };
     }
 
-    if (!instanceId) {
+    if (!instanceIdRef.current) {
       const originIds = new Set<string>();
       const originLabels: string[] = [];
       for (const m of data as any[]) {
@@ -503,7 +509,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
     });
 
     setIsLoadingMessages(false);
-  }, [directionFilter, getConversation, instanceId, mergeMessages, preferLocal, scrollToBottom]);
+  }, [directionFilter, getConversation, mergeMessages, preferLocal, scrollToBottom]);
 
   const loadOlderMessages = useCallback(async () => {
     const contact = selectedContactRef.current;
@@ -569,13 +575,14 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
       setSelectedContact(n);
       selectedContactRef.current = n;
       setSelectedName((name ?? '').trim() ? (name ?? null) : null);
-      if (!instanceId) {
+      const effectiveInstanceId = (instanceIdRef.current ?? '').toString().trim();
+      if (!effectiveInstanceId) {
         setSelectedOriginInstanceId((originInstanceId ?? null) as any);
         setSelectedOriginLabel((originNumber ?? originLabel ?? originInstanceId ?? 'todas instâncias') as any);
       } else {
-        setSelectedOriginInstanceId(instanceId);
-        const match = instances.find((i) => i.id === instanceId);
-        setSelectedOriginLabel((match?.name ?? instanceId) as any);
+        setSelectedOriginInstanceId(effectiveInstanceId);
+        const match = instances.find((i) => i.id === effectiveInstanceId);
+        setSelectedOriginLabel((match?.name ?? effectiveInstanceId) as any);
       }
       setMessages([]);
       setConversationLimit(50);
@@ -595,7 +602,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
         const resp = await api.get<{ profilePicUrl: string | null }>('/integrations/evolution/messages/profile-pic', {
           params: {
             jid: (remoteJid ?? '').trim() || `${n}@s.whatsapp.net`,
-            instanceId: instanceId || originInstanceId || undefined
+            instanceId: effectiveInstanceId || originInstanceId || undefined
           }
         });
         setSelectedAvatarUrl(resp.data.profilePicUrl ?? avatarUrl ?? null);
@@ -604,7 +611,7 @@ import type { ChatItem, Message, RenderedMessageItem } from '../../../components
       }
       await applyConversation(n, 50, { allowRetryLocal: true, remoteJid: remoteJid ?? null });
     },
-    [applyConversation, instanceId, instances]
+    [applyConversation, instances]
   );
 
   useEffect(() => {
