@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 
 export function Avatar(props: { url?: string | null; label: string; className?: string }) {
   const [failed, setFailed] = useState(false);
@@ -9,13 +10,20 @@ export function Avatar(props: { url?: string | null; label: string; className?: 
   }, [src]);
 
   return (
-    <div className={props.className}>
+    <div className={`${props.className ?? ''} relative`}>
       {src && !failed ? (
-        <img src={src} alt="" className="h-full w-full object-cover" onError={() => setFailed(true)} />
+        <Image
+          loader={({ src }) => src}
+          src={src}
+          alt=""
+          fill
+          unoptimized
+          className="object-cover"
+          onError={() => setFailed(true)}
+        />
       ) : (
         (props.label ?? '•').trim()[0] ?? '•'
       )}
     </div>
   );
 }
-
