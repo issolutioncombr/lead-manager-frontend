@@ -74,12 +74,17 @@ const isMessagePayload = (value: unknown): value is Message => {
   const isLoadingOlderRef = useRef(false);
   const chatsAvatarSeqRef = useRef(0);
   const chatAvatarCacheRef = useRef<Record<string, string | null>>({});
+  const selectedAvatarUrlRef = useRef<string | null>(null);
  
    const normalizedPhone = useMemo(() => (selectedContact ?? '').replace(/\D+/g, ''), [selectedContact]);
  
   useEffect(() => {
     instanceIdRef.current = instanceId;
   }, [instanceId]);
+
+  useEffect(() => {
+    selectedAvatarUrlRef.current = selectedAvatarUrl;
+  }, [selectedAvatarUrl]);
 
   const resetConversationView = useCallback(() => {
     avatarRequestSeqRef.current += 1;
@@ -246,7 +251,7 @@ const isMessagePayload = (value: unknown): value is Message => {
         if (selectedContactRef.current !== n) return;
         const url = resp.data.profilePicUrl ?? null;
         chatAvatarCacheRef.current[cacheKey] = url;
-        if (url) setSelectedAvatarUrl(url);
+        if (url && !selectedAvatarUrlRef.current) setSelectedAvatarUrl(url);
       } catch {
         if (seq !== avatarRequestSeqRef.current) return;
         if (selectedContactRef.current !== n) return;
@@ -481,6 +486,7 @@ const isMessagePayload = (value: unknown): value is Message => {
   useEffect(() => {
     if (!selectedContact) return;
     const selectedInstanceId = (instanceIdRef.current || '').toString().trim();
+    if (selectedAvatarUrlRef.current) return;
     void fetchAvatarForSelectedContact(selectedInstanceId || null);
   }, [fetchAvatarForSelectedContact, instanceId, selectedContact]);
  
@@ -687,7 +693,8 @@ const isMessagePayload = (value: unknown): value is Message => {
         setError('Esse contato não é um número suportado (somente telefones E.164).');
         return;
       }
-      setSelectedAvatarUrl(avatarUrl ?? null);
+      const avatarSeed = typeof avatarUrl === 'string' ? avatarUrl.trim() : '';
+      setSelectedAvatarUrl(avatarSeed || null);
       selectedRemoteJidRef.current = remoteJid ?? null;
       setSelectedContact(n);
       selectedContactRef.current = n;
@@ -716,7 +723,9 @@ const isMessagePayload = (value: unknown): value is Message => {
         delete copy[n];
         return copy;
       });
-      void fetchAvatarForSelectedContact(effectiveInstanceId || null);
+      if (!avatarSeed) {
+        void fetchAvatarForSelectedContact(effectiveInstanceId || null);
+      }
       await applyConversation(n, 50, { allowRetryLocal: true, remoteJid: remoteJid ?? null });
     },
     [applyConversation, fetchAvatarForSelectedContact, instances]
@@ -844,12 +853,12 @@ const isMessagePayload = (value: unknown): value is Message => {
       setSelectedOriginLabel(match?.name ?? instanceId);
       setSelectedOriginInstanceId(instanceId);
       selectedOriginInstanceIdRef.current = instanceId;
-      void fetchAvatarForSelectedContact(instanceId);
+      if (!selectedAvatarUrlRef.current) void fetchAvatarForSelectedContact(instanceId);
     } else {
       setSelectedOriginInstanceId(null);
       setSelectedOriginLabel(null);
       selectedOriginInstanceIdRef.current = null;
-      void fetchAvatarForSelectedContact(null);
+      if (!selectedAvatarUrlRef.current) void fetchAvatarForSelectedContact(null);
     }
     lastMessageIdRef.current = null;
     lastCursorRef.current = { lastTimestamp: new Date(0).toISOString(), lastUpdatedAt: new Date(0).toISOString() };
