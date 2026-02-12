@@ -18,6 +18,7 @@ type ManualPromptListItem = {
 
 type ManualPromptDetail = {
   id: string;
+  categoryId: string | null;
   agentName: string | null;
   active: boolean;
   version: number;
@@ -26,14 +27,6 @@ type ManualPromptDetail = {
 
 type FaqItem = { question: string; answer: string };
 
-const safeJsonParse = (value: string) => {
-  try {
-    return JSON.parse(value);
-  } catch {
-    return null;
-  }
-};
-
 export default function ManualPromptsPage() {
   useProtectedRoute();
 
@@ -41,6 +34,9 @@ export default function ManualPromptsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [categories, setCategories] = useState<Array<{ id: string; name: string; description?: string | null }>>([]);
+  const [categoryId, setCategoryId] = useState<string>('');
 
   const [isOpen, setIsOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -51,11 +47,6 @@ export default function ManualPromptsPage() {
   const [strategy, setStrategy] = useState('');
   const [businessRules, setBusinessRules] = useState('');
   const [serviceParameters, setServiceParameters] = useState('');
-  const [timezone, setTimezone] = useState('America/Sao_Paulo');
-  const [windowStart, setWindowStart] = useState('');
-  const [windowEnd, setWindowEnd] = useState('');
-  const [minLeadTimeMinutes, setMinLeadTimeMinutes] = useState('');
-  const [variablesJson, setVariablesJson] = useState('{}');
   const [faqs, setFaqs] = useState<FaqItem[]>([]);
 
   const load = async () => {
@@ -76,19 +67,22 @@ export default function ManualPromptsPage() {
     void load();
   }, []);
 
+  useEffect(() => {
+    api
+      .get<{ data: Array<{ id: string; name: string; description?: string | null }> }>('/prompt-categories')
+      .then((resp) => setCategories(Array.isArray(resp.data?.data) ? resp.data.data : []))
+      .catch(() => setCategories([]));
+  }, []);
+
   const resetForm = () => {
     setEditingId(null);
+    setCategoryId('');
     setAgentName('');
     setActive(true);
     setLanguage('');
     setStrategy('');
     setBusinessRules('');
     setServiceParameters('');
-    setTimezone('America/Sao_Paulo');
-    setWindowStart('');
-    setWindowEnd('');
-    setMinLeadTimeMinutes('');
-    setVariablesJson('{}');
     setFaqs([]);
   };
 
@@ -102,6 +96,7 @@ export default function ManualPromptsPage() {
     try {
       const { data } = await api.get<ManualPromptDetail>(`/prompts/manual/${encodeURIComponent(id)}`);
       setEditingId(data.id);
+      setCategoryId(data.categoryId ?? '');
       setAgentName(data.agentName ?? '');
       setActive(Boolean(data.active));
       const cfg = data.config ?? {};
@@ -109,11 +104,6 @@ export default function ManualPromptsPage() {
       setStrategy(cfg.strategy ?? '');
       setBusinessRules(cfg.businessRules ?? '');
       setServiceParameters(cfg.serviceParameters ?? '');
-      setTimezone(cfg.scheduling?.timezone ?? 'America/Sao_Paulo');
-      setWindowStart(cfg.scheduling?.windowStart ?? '');
-      setWindowEnd(cfg.scheduling?.windowEnd ?? '');
-      setMinLeadTimeMinutes(cfg.scheduling?.minLeadTimeMinutes ?? '');
-      setVariablesJson(JSON.stringify(cfg.variables ?? {}, null, 2));
       setFaqs(Array.isArray(cfg.faqs) ? cfg.faqs : []);
       setIsOpen(true);
     } catch {
@@ -121,32 +111,21 @@ export default function ManualPromptsPage() {
     }
   };
 
-  const canSave = useMemo(() => agentName.trim().length > 0, [agentName]);
+  const canSave = useMemo(() => agentName.trim().length > 0 && categoryId.trim().length > 0, [agentName, categoryId]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!canSave) return;
-    const vars = variablesJson.trim() ? safeJsonParse(variablesJson) : {};
-    if (vars === null) {
-      setError('Variáveis: JSON inválido.');
-      return;
-    }
 
     const payload: any = {
+      categoryId: categoryId.trim(),
       agentName: agentName.trim(),
       active,
       language: language.trim() || undefined,
       strategy: strategy.trim() || undefined,
       businessRules: businessRules.trim() || undefined,
       serviceParameters: serviceParameters.trim() || undefined,
-      faqs: faqs.filter((f) => f.question.trim() && f.answer.trim()),
-      variables: vars,
-      scheduling: {
-        timezone: timezone.trim() || undefined,
-        windowStart: windowStart.trim() || undefined,
-        windowEnd: windowEnd.trim() || undefined,
-        minLeadTimeMinutes: minLeadTimeMinutes.trim() || undefined
-      }
+      faqs: faqs.filter((f) => f.question.trim() && f.answer.trim())
     };
 
     setSaving(true);
@@ -224,6 +203,21 @@ export default function ManualPromptsPage() {
         <form onSubmit={submit} className="grid gap-4">
           <div className="grid gap-3 md:grid-cols-2">
             <label className="text-sm">
+              Categoria do agente
+              <select
+                value={categoryId}
+                onChange={(e) => setCategoryId(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 focus:border-primary focus:outline-none"
+              >
+                <option value="">Selecione...</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-sm">
               Nome do agente
               <input
                 value={agentName}
@@ -255,30 +249,6 @@ export default function ManualPromptsPage() {
           <label className="text-sm">
             Parâmetros de atendimento
             <textarea value={serviceParameters} onChange={(e) => setServiceParameters(e.target.value)} rows={5} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none" />
-          </label>
-
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="text-sm">
-              Timezone
-              <input value={timezone} onChange={(e) => setTimezone(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none" />
-            </label>
-            <label className="text-sm">
-              Antecedência mínima (min)
-              <input value={minLeadTimeMinutes} onChange={(e) => setMinLeadTimeMinutes(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none" />
-            </label>
-            <label className="text-sm">
-              Janela início
-              <input value={windowStart} onChange={(e) => setWindowStart(e.target.value)} placeholder="09:00" className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none" />
-            </label>
-            <label className="text-sm">
-              Janela fim
-              <input value={windowEnd} onChange={(e) => setWindowEnd(e.target.value)} placeholder="18:00" className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none" />
-            </label>
-          </div>
-
-          <label className="text-sm">
-            Variáveis específicas (JSON)
-            <textarea value={variablesJson} onChange={(e) => setVariablesJson(e.target.value)} rows={6} className="mt-1 w-full font-mono rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none" />
           </label>
 
           <div className="rounded-lg border border-gray-200 p-4">

@@ -10,6 +10,7 @@ const HIDE_AGENT_PROMPT_TEXT = (process.env.NEXT_PUBLIC_HIDE_AGENT_PROMPT_TEXT ?
 
 type PromptItem = {
   id: string;
+  promptCategoryId?: string | null;
   name: string | null;
   prompt: string | null;
   active: boolean;
@@ -47,8 +48,10 @@ export default function AgentPromptPage() {
   const [isDeletingPromptId, setIsDeletingPromptId] = useState<string | null>(null);
 
   const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
+  const [editingCategoryId, setEditingCategoryId] = useState<string>('');
   const [promptName, setPromptName] = useState<string>('');
   const [promptText, setPromptText] = useState<string>('');
+  const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
 
   const [links, setLinks] = useState<InstancePromptLinkItem[]>([]);
   const [isLoadingLinks, setIsLoadingLinks] = useState(true);
@@ -122,6 +125,14 @@ export default function AgentPromptPage() {
     return () => {
       isMounted = false;
     };
+  }, [authLoading, seller]);
+
+  useEffect(() => {
+    if (authLoading || seller) return;
+    api
+      .get<{ data: Array<{ id: string; name: string }> }>('/prompt-categories')
+      .then((resp) => setCategories(Array.isArray(resp.data?.data) ? resp.data.data : []))
+      .catch(() => setCategories([]));
   }, [authLoading, seller]);
 
   useEffect(() => {
@@ -207,6 +218,7 @@ export default function AgentPromptPage() {
       return;
     }
     setEditingPromptId(null);
+    setEditingCategoryId('');
     setPromptName('');
     setPromptText('');
     setError(null);
@@ -220,6 +232,7 @@ export default function AgentPromptPage() {
       return;
     }
     setEditingPromptId(p.id);
+    setEditingCategoryId((p.promptCategoryId ?? '').toString());
     setPromptName(p.name ?? '');
     setPromptText(p.prompt ?? '');
     setError(null);
@@ -263,6 +276,7 @@ export default function AgentPromptPage() {
       }
       if (editingPromptId) {
         const resp = await api.put<{ data: PromptItem }>(`/agent-prompt/prompts/${encodeURIComponent(editingPromptId)}`, {
+          categoryId: editingCategoryId,
           name: promptName,
           prompt: promptText
         });
@@ -271,6 +285,7 @@ export default function AgentPromptPage() {
         setSuccessMessage('Prompt atualizado com sucesso.');
       } else {
         const resp = await api.post<{ data: PromptItem }>('/agent-prompt/prompts', {
+          categoryId: editingCategoryId,
           name: promptName,
           prompt: promptText
         });
@@ -393,7 +408,7 @@ export default function AgentPromptPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <div className="space-y-4 rounded-lg border bg-white p-4">
-          <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-slate-900">Vínculos por instância</h2>
           </div>
 
@@ -597,6 +612,26 @@ export default function AgentPromptPage() {
               {editingPromptId ? 'Editar prompt' : 'Criar prompt'}
             </div>
             <label className="block text-sm font-medium text-gray-700">
+              Categoria
+              <select
+                value={editingCategoryId}
+                onChange={(e) => {
+                  setEditingCategoryId(e.target.value);
+                  setError(null);
+                  setSuccessMessage(null);
+                }}
+                className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 shadow-sm focus:border-primary focus:outline-none"
+                disabled={isSavingLibrary || !isSuperAdmin}
+              >
+                <option value="">Selecione...</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm font-medium text-gray-700">
               Nome (opcional)
               <input
                 value={promptName}
@@ -651,6 +686,7 @@ export default function AgentPromptPage() {
                     isSavingLibrary ||
                     HIDE_AGENT_PROMPT_TEXT ||
                     !isSuperAdmin ||
+                    !editingCategoryId.trim() ||
                     !promptText.trim() ||
                     promptText.trim().length > maxStoredPromptLength ||
                     !!duplicatePromptNameMessage
