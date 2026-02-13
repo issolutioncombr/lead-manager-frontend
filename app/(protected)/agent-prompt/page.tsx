@@ -632,7 +632,7 @@ export default function AgentPromptPage() {
               </select>
             </label>
             <label className="block text-sm font-medium text-gray-700">
-              Nome (opcional)
+              Nome
               <input
                 value={promptName}
                 onChange={(e) => {
@@ -687,6 +687,7 @@ export default function AgentPromptPage() {
                     HIDE_AGENT_PROMPT_TEXT ||
                     !isSuperAdmin ||
                     !editingCategoryId.trim() ||
+                    !promptName.trim() ||
                     !promptText.trim() ||
                     promptText.trim().length > maxStoredPromptLength ||
                     !!duplicatePromptNameMessage

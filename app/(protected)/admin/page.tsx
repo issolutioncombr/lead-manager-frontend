@@ -43,6 +43,26 @@ type AdminCreatedPromptRow = {
   previewPrompt: string;
 };
 
+type UserPromptListItem = {
+  id: string;
+  userId: string;
+  name: string | null;
+  promptType: string;
+  isManual: boolean;
+  category: { id: string; name: string } | null;
+  active: boolean;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  createdByType: string;
+  previewPrompt: string;
+};
+
+type UserPromptDetail = UserPromptListItem & {
+  prompt: string;
+  manualConfig: any;
+};
+
 type FaqItem = { question: string; answer: string };
 
 const safeJsonParse = (value: string) => {
@@ -100,6 +120,25 @@ export default function AdminPage() {
   const [isAdminPromptsOpen, setIsAdminPromptsOpen] = useState(false);
   const [adminCreatedPrompts, setAdminCreatedPrompts] = useState<AdminCreatedPromptRow[]>([]);
   const [loadingAdminPrompts, setLoadingAdminPrompts] = useState(false);
+
+  const [isUserPromptsOpen, setIsUserPromptsOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
+  const [loadingUserPrompts, setLoadingUserPrompts] = useState(false);
+  const [userPrompts, setUserPrompts] = useState<UserPromptListItem[]>([]);
+
+  const [editingUserPromptId, setEditingUserPromptId] = useState<string | null>(null);
+  const [userPromptName, setUserPromptName] = useState('');
+  const [userPromptType, setUserPromptType] = useState('USER_RAW');
+  const [userPromptCategoryId, setUserPromptCategoryId] = useState('');
+  const [userPromptActive, setUserPromptActive] = useState(true);
+  const [userPromptText, setUserPromptText] = useState('');
+  const [userPromptLanguage, setUserPromptLanguage] = useState('');
+  const [userPromptStrategy, setUserPromptStrategy] = useState('');
+  const [userPromptBusinessRules, setUserPromptBusinessRules] = useState('');
+  const [userPromptServiceParameters, setUserPromptServiceParameters] = useState('');
+  const [userPromptFaqs, setUserPromptFaqs] = useState<FaqItem[]>([]);
+  const [userPromptPreview, setUserPromptPreview] = useState<string | null>(null);
+  const [savingUserPrompt, setSavingUserPrompt] = useState(false);
 
   const loadUsers = async () => {
     setLoading(true);
@@ -320,6 +359,134 @@ export default function AdminPage() {
     }
   };
 
+  const resetUserPromptForm = () => {
+    setEditingUserPromptId(null);
+    setUserPromptName('');
+    setUserPromptType('USER_RAW');
+    setUserPromptCategoryId('');
+    setUserPromptActive(true);
+    setUserPromptText('');
+    setUserPromptLanguage('');
+    setUserPromptStrategy('');
+    setUserPromptBusinessRules('');
+    setUserPromptServiceParameters('');
+    setUserPromptFaqs([]);
+    setUserPromptPreview(null);
+  };
+
+  const loadUserPrompts = async (userId: string) => {
+    setLoadingUserPrompts(true);
+    setError(null);
+    try {
+      const resp = await api.get<{ data: UserPromptListItem[] }>(`/admin/users/${encodeURIComponent(userId)}/prompts`);
+      setUserPrompts(Array.isArray(resp.data?.data) ? resp.data.data : []);
+    } catch {
+      setUserPrompts([]);
+      setError('Não foi possível carregar os prompts do usuário.');
+    } finally {
+      setLoadingUserPrompts(false);
+    }
+  };
+
+  const openUserPrompts = async (u: AdminUser) => {
+    setSelectedUser(u);
+    setIsUserPromptsOpen(true);
+    resetUserPromptForm();
+    await loadUserPrompts(u.id);
+  };
+
+  const startEditUserPrompt = async (promptId: string) => {
+    if (!selectedUser?.id) return;
+    setError(null);
+    setUserPromptPreview(null);
+    try {
+      const resp = await api.get<{ data: UserPromptDetail }>(
+        `/admin/users/${encodeURIComponent(selectedUser.id)}/prompts/${encodeURIComponent(promptId)}`
+      );
+      const p = resp.data?.data;
+      setEditingUserPromptId(p.id);
+      setUserPromptName(p.name ?? '');
+      setUserPromptType(p.promptType ?? 'USER_RAW');
+      setUserPromptCategoryId(p.category?.id ?? '');
+      setUserPromptActive(Boolean(p.active));
+      setUserPromptText(String(p.prompt ?? ''));
+      setUserPromptPreview(String(p.previewPrompt ?? ''));
+      const cfg = p.manualConfig && typeof p.manualConfig === 'object' ? p.manualConfig : null;
+      const userCfg = cfg?.user && typeof cfg.user === 'object' ? cfg.user : {};
+      setUserPromptLanguage(userCfg?.language ?? '');
+      setUserPromptStrategy(userCfg?.strategy ?? '');
+      setUserPromptBusinessRules(userCfg?.businessRules ?? '');
+      setUserPromptServiceParameters(userCfg?.serviceParameters ?? '');
+      setUserPromptFaqs(Array.isArray(userCfg?.faqs) ? userCfg.faqs : []);
+    } catch {
+      setError('Não foi possível carregar o prompt.');
+    }
+  };
+
+  const deleteUserPrompt = async (promptId: string) => {
+    if (!selectedUser?.id) return;
+    setError(null);
+    try {
+      await api.delete(`/admin/users/${encodeURIComponent(selectedUser.id)}/prompts/${encodeURIComponent(promptId)}`);
+      await loadUserPrompts(selectedUser.id);
+      if (editingUserPromptId === promptId) resetUserPromptForm();
+    } catch {
+      setError('Não foi possível excluir o prompt.');
+    }
+  };
+
+  const canSaveUserPrompt = useMemo(() => {
+    if (!selectedUser?.id) return false;
+    if (!userPromptName.trim()) return false;
+    if (!userPromptCategoryId.trim()) return false;
+    if (userPromptType === 'USER_MANUAL') return true;
+    return !!userPromptText.trim();
+  }, [selectedUser, userPromptName, userPromptCategoryId, userPromptType, userPromptText]);
+
+  const saveUserPrompt = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!selectedUser?.id) return;
+    if (!canSaveUserPrompt) return;
+    if (savingUserPrompt) return;
+    setSavingUserPrompt(true);
+    setError(null);
+    try {
+      const payload: any = {
+        name: userPromptName.trim(),
+        categoryId: userPromptCategoryId.trim(),
+        promptType: userPromptType,
+        active: userPromptActive
+      };
+      if (userPromptType === 'USER_MANUAL') {
+        payload.userConfig = {
+          language: userPromptLanguage.trim() || undefined,
+          strategy: userPromptStrategy.trim() || undefined,
+          businessRules: userPromptBusinessRules.trim() || undefined,
+          serviceParameters: userPromptServiceParameters.trim() || undefined,
+          faqs: userPromptFaqs.filter((f) => f.question.trim() && f.answer.trim())
+        };
+      } else {
+        payload.prompt = userPromptText.trim();
+      }
+
+      if (editingUserPromptId) {
+        const resp = await api.put<{ previewPrompt?: string }>(
+          `/admin/users/${encodeURIComponent(selectedUser.id)}/prompts/${encodeURIComponent(editingUserPromptId)}`,
+          payload
+        );
+        setUserPromptPreview(String((resp.data as any)?.previewPrompt ?? ''));
+      } else {
+        const resp = await api.post<{ previewPrompt?: string }>(`/admin/users/${encodeURIComponent(selectedUser.id)}/prompts`, payload);
+        setUserPromptPreview(String((resp.data as any)?.previewPrompt ?? ''));
+      }
+      await loadUserPrompts(selectedUser.id);
+    } catch {
+      setError('Não foi possível salvar o prompt.');
+    } finally {
+      setSavingUserPrompt(false);
+    }
+  };
+
   return (
     <div className="p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -358,6 +525,7 @@ export default function AdminPage() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Role</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Aprovado</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Criado em</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Prompts</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -374,11 +542,20 @@ export default function AdminPage() {
                     </label>
                   </td>
                   <td className="px-4 py-2 text-sm text-gray-700">{new Date(u.createdAt).toLocaleString()}</td>
+                  <td className="px-4 py-2 text-sm">
+                    <button
+                      type="button"
+                      onClick={() => void openUserPrompts(u)}
+                      className="rounded-md border border-gray-200 px-3 py-1 hover:bg-gray-50"
+                    >
+                      Ver/Editar
+                    </button>
+                  </td>
                 </tr>
               ))}
               {users.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-6 text-center text-sm text-gray-500" colSpan={6}>
+                  <td className="px-4 py-6 text-center text-sm text-gray-500" colSpan={7}>
                     Nenhum usuário.
                   </td>
                 </tr>
@@ -699,6 +876,227 @@ export default function AdminPage() {
                 {savingCategory ? 'Salvando...' : 'Salvar categoria'}
               </button>
             </div>
+          </form>
+        </div>
+      </Modal>
+
+      <Modal
+        title={selectedUser ? `Prompts do Usuário: ${selectedUser.name} (${selectedUser.email})` : 'Prompts do Usuário'}
+        isOpen={isUserPromptsOpen}
+        onClose={() => {
+          setIsUserPromptsOpen(false);
+          setSelectedUser(null);
+          resetUserPromptForm();
+          setUserPrompts([]);
+        }}
+        size="xl"
+      >
+        <div className="grid gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-sm text-gray-600">
+              {selectedUser ? `UserId: ${selectedUser.id}` : ''}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => resetUserPromptForm()}
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-gray-50"
+              >
+                Novo prompt
+              </button>
+              <button
+                type="button"
+                onClick={() => (selectedUser?.id ? void loadUserPrompts(selectedUser.id) : undefined)}
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-gray-50"
+              >
+                Recarregar
+              </button>
+            </div>
+          </div>
+
+          {loadingUserPrompts ? (
+            <div className="py-10 text-center text-sm text-gray-500">Carregando prompts...</div>
+          ) : (
+            <div className="overflow-hidden rounded-lg border bg-white">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Nome</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Categoria</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Tipo</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Criado por</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Ativo</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Atualizado</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {userPrompts.map((p) => (
+                    <tr key={p.id}>
+                      <td className="px-4 py-2 text-sm font-semibold text-slate-900">{p.name ?? '—'}</td>
+                      <td className="px-4 py-2 text-sm text-gray-700">{p.category?.name ?? '—'}</td>
+                      <td className="px-4 py-2 text-sm text-gray-700">{p.isManual ? 'MANUAL' : p.promptType}</td>
+                      <td className="px-4 py-2 text-sm text-gray-700">{p.createdByType}</td>
+                      <td className="px-4 py-2 text-sm text-gray-700">{p.active ? 'Sim' : 'Não'}</td>
+                      <td className="px-4 py-2 text-sm text-gray-700">{new Date(p.updatedAt).toLocaleString()}</td>
+                      <td className="px-4 py-2 text-sm">
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void startEditUserPrompt(p.id)}
+                            className="rounded-md border border-gray-200 px-3 py-1 hover:bg-gray-50"
+                          >
+                            Abrir
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void deleteUserPrompt(p.id)}
+                            className="rounded-md border border-red-200 px-3 py-1 text-red-600 hover:bg-red-50"
+                          >
+                            Excluir
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {userPrompts.length === 0 ? (
+                    <tr>
+                      <td className="px-4 py-6 text-center text-sm text-gray-500" colSpan={7}>
+                        Nenhum prompt.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <form onSubmit={saveUserPrompt} className="grid gap-3 rounded-lg border bg-white p-4">
+            <div className="text-sm font-semibold text-slate-900">{editingUserPromptId ? 'Editar prompt' : 'Criar prompt'}</div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="text-sm">
+                Nome
+                <input value={userPromptName} onChange={(e) => setUserPromptName(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none" />
+              </label>
+              <label className="text-sm">
+                Categoria
+                <select
+                  value={userPromptCategoryId}
+                  onChange={(e) => setUserPromptCategoryId(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 focus:border-primary focus:outline-none"
+                  disabled={isLoadingCategories}
+                >
+                  <option value="">Selecione...</option>
+                  {categories
+                    .filter((c) => c.active !== false)
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label className="text-sm">
+                Tipo
+                <select value={userPromptType} onChange={(e) => setUserPromptType(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 focus:border-primary focus:outline-none">
+                  <option value="USER_RAW">USER_RAW</option>
+                  <option value="SUPER_ADMIN">SUPER_ADMIN</option>
+                  <option value="USER_MANUAL">USER_MANUAL</option>
+                </select>
+              </label>
+              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                <input type="checkbox" checked={userPromptActive} onChange={(e) => setUserPromptActive(e.target.checked)} />
+                Ativo
+              </label>
+            </div>
+
+            {userPromptType === 'USER_MANUAL' ? (
+              <div className="grid gap-3 rounded-lg border border-gray-200 p-4">
+                <div className="text-sm font-semibold text-slate-900">Config do User</div>
+                <label className="text-sm">
+                  Linguagem
+                  <textarea value={userPromptLanguage} onChange={(e) => setUserPromptLanguage(e.target.value)} rows={3} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none" />
+                </label>
+                <label className="text-sm">
+                  Estratégia
+                  <textarea value={userPromptStrategy} onChange={(e) => setUserPromptStrategy(e.target.value)} rows={4} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none" />
+                </label>
+                <label className="text-sm">
+                  Regras comerciais
+                  <textarea value={userPromptBusinessRules} onChange={(e) => setUserPromptBusinessRules(e.target.value)} rows={4} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none" />
+                </label>
+                <label className="text-sm">
+                  Parâmetros de atendimento
+                  <textarea value={userPromptServiceParameters} onChange={(e) => setUserPromptServiceParameters(e.target.value)} rows={4} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 focus:border-primary focus:outline-none" />
+                </label>
+                <div className="rounded-lg border border-gray-200 p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <div className="text-sm font-semibold text-slate-900">FAQ</div>
+                    <button
+                      type="button"
+                      onClick={() => setUserPromptFaqs((prev) => [...prev, { question: '', answer: '' }])}
+                      className="rounded-md border border-gray-200 px-3 py-1 text-sm hover:bg-gray-50"
+                    >
+                      Adicionar
+                    </button>
+                  </div>
+                  <div className="grid gap-2">
+                    {userPromptFaqs.map((f, idx) => (
+                      <div key={idx} className="grid gap-2 rounded-lg border border-gray-100 p-3">
+                        <input
+                          value={f.question}
+                          onChange={(e) => setUserPromptFaqs((prev) => prev.map((x, i) => (i === idx ? { ...x, question: e.target.value } : x)))}
+                          placeholder="Pergunta"
+                          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+                        />
+                        <textarea
+                          value={f.answer}
+                          onChange={(e) => setUserPromptFaqs((prev) => prev.map((x, i) => (i === idx ? { ...x, answer: e.target.value } : x)))}
+                          placeholder="Resposta"
+                          rows={3}
+                          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+                        />
+                        <div>
+                          <button
+                            type="button"
+                            onClick={() => setUserPromptFaqs((prev) => prev.filter((_, i) => i !== idx))}
+                            className="rounded-md border border-red-200 px-3 py-1 text-sm text-red-600 hover:bg-red-50"
+                          >
+                            Remover
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {userPromptFaqs.length === 0 ? <div className="text-sm text-gray-500">Nenhuma FAQ adicionada.</div> : null}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <label className="text-sm">
+                Prompt (texto)
+                <textarea value={userPromptText} onChange={(e) => setUserPromptText(e.target.value)} rows={10} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 font-mono text-xs focus:border-primary focus:outline-none" />
+              </label>
+            )}
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="submit"
+                disabled={!canSaveUserPrompt || savingUserPrompt}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {savingUserPrompt ? 'Salvando...' : 'Salvar'}
+              </button>
+              <button type="button" onClick={() => resetUserPromptForm()} className="rounded-lg border border-gray-200 px-4 py-2 text-sm hover:bg-gray-50">
+                Limpar
+              </button>
+            </div>
+
+            {userPromptPreview ? (
+              <div className="grid gap-2 rounded-lg border border-gray-200 bg-white p-4">
+                <div className="text-sm font-semibold text-slate-900">Preview (prompt completo)</div>
+                <textarea value={userPromptPreview} readOnly rows={14} className="w-full rounded-lg border border-gray-200 px-3 py-2 font-mono text-xs" />
+              </div>
+            ) : null}
           </form>
         </div>
       </Modal>
